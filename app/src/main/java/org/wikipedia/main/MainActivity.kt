@@ -61,11 +61,11 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
     private val mBroadcastReceiver: BroadcastReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent != null && context != null) {
-                if (intent.action == BROADCAST_URL_VALIDATION_SUCCEEDED) {
-                    val validUrl = intent.getStringExtra(EXTENDED_DATA_VALID_URL)
-                    val validService = intent.getStringExtra(EXTENDED_DATA_VALID_SERVICE)
+                if (intent.action == ENVOY_BROADCAST_VALIDATION_SUCCEEDED) {
+                    val validUrl = intent.getStringExtra(ENVOY_DATA_URL_SUCCEEDED)
+                    val validService = intent.getStringExtra(ENVOY_DATA_SERVICE_SUCCEEDED)
                     if (validUrl.isNullOrEmpty()) {
-                        Log.e(TAG, "received empty list of valid urls")
+                        Log.e(TAG, "received a valid url that was empty or null")
                     } else if (waitingForEnvoy) {
                         waitingForEnvoy = false
                         // select the first url that is returned (assumed to have the lowest latency)
@@ -99,11 +99,11 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
 
                         Log.d(TAG,"already selected a valid url, ignore valid url: " + validUrl)
                     }
-                } else if (intent.action == BROADCAST_URL_VALIDATION_FAILED) {
-                    val invalidUrl = intent.getStringExtra(EXTENDED_DATA_INVALID_URL)
-                    val invalidService = intent.getStringExtra(EXTENDED_DATA_INVALID_SERVICE)
+                } else if (intent.action == ENVOY_BROADCAST_VALIDATION_FAILED) {
+                    val invalidUrl = intent.getStringExtra(ENVOY_DATA_URL_FAILED)
+                    val invalidService = intent.getStringExtra(ENVOY_DATA_SERVICE_FAILED)
                     if (invalidUrl.isNullOrEmpty()) {
-                        Log.e(TAG, "received null value for invalid url")
+                        Log.e(TAG, "received an invalid url that was empty or null")
                     } else {
 
                         // firebase logging
@@ -142,6 +142,7 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
             Log.w(TAG, "no default proxy urls were provided")
         } else {
             Log.d(TAG, "found default proxy urls: " + BuildConfig.DEF_PROXY)
+            listOfUrls.clear()
             listOfUrls.addAll(BuildConfig.DEF_PROXY.split(","))
             invalidUrls.clear()
 
@@ -159,7 +160,7 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
             dnsttConfig.add(BuildConfig.DOH_URL)
             dnsttConfig.add(BuildConfig.DOT_ADDR)
 
-            NetworkIntentService.submit(this@MainActivity, listOfUrls, null, BuildConfig.HYST_CERT, dnsttConfig)
+            NetworkIntentService.submit(this@MainActivity, listOfUrls, DIRECT_URL, BuildConfig.HYST_CERT, dnsttConfig)
         }
     }
 
@@ -171,8 +172,8 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
 
         // register to receive test results
         LocalBroadcastManager.getInstance(this).registerReceiver(mBroadcastReceiver, IntentFilter().apply {
-            addAction(BROADCAST_URL_VALIDATION_SUCCEEDED)
-            addAction(BROADCAST_URL_VALIDATION_FAILED)
+            addAction(ENVOY_BROADCAST_VALIDATION_SUCCEEDED)
+            addAction(ENVOY_BROADCAST_VALIDATION_FAILED)
         })
 
         setImageZoomHelper()
@@ -200,6 +201,10 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
             Log.d(TAG, "cronet already running, don't try to start envoy again")
         } else if (waitingForEnvoy) {
             Log.d(TAG, "already processing urls, don't try to start envoy again")
+        } else if (listOfUrls.size > 0) {
+            // encountered a situation where direct url is returned, clears the flag, and
+            // onResume triggers another call to envoyInit before the first is complete
+            Log.d(TAG, "probably processing urls, don't try to start envoy again")
         } else {
             // run envoy setup (fetches and validate urls)
             Log.d(TAG, "start envoy to process urls")

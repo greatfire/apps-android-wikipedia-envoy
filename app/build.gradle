@@ -353,14 +353,14 @@ dependencies {
     androidTestImplementation "android.arch.persistence.room:testing:1.1.1"
     androidTestUtil 'androidx.test:orchestrator:1.4.1'
 
-    // use local files for debug builds to support development
-    debugImplementation files('libs/cronet-debug.aar')
-    debugImplementation files('libs/envoy-debug.aar')
-    debugImplementation files('libs/IEnvoyProxy.aar')
-    // use maven dependencies for release builds to support automation
-    releaseImplementation 'org.greatfire.envoy:cronet:102.0.5005.41'
-    releaseImplementation 'org.greatfire:envoy:102.0.5005.41'
-    releaseImplementation 'org.greatfire:IEnvoyProxy:1.2.0'
+    // switch to local files if needed to support development
+    // implementation files('libs/cronet-debug.aar')
+    // implementation files('libs/envoy-debug.aar')
+    // implementation files('libs/IEnvoyProxy.aar')
+    // use maven dependencies to support automation
+    implementation 'org.greatfire.envoy:cronet:102.0.5005.41'
+    implementation 'org.greatfire:envoy:102.00.5005.41.4'
+    implementation 'org.greatfire:IEnvoyProxy:1.2.0'
 }
 
 /*

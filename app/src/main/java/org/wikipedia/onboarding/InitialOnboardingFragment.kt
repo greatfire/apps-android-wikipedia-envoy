@@ -17,7 +17,7 @@ import org.wikipedia.analytics.LoginFunnel
 import org.wikipedia.login.LoginActivity
 import org.wikipedia.model.EnumCode
 import org.wikipedia.model.EnumCodeMap
-import org.wikipedia.settings.Prefs
+// import org.wikipedia.settings.Prefs
 import org.wikipedia.settings.languages.WikipediaLanguagesActivity
 import org.wikipedia.util.FeedbackUtil
 import org.wikipedia.util.UriUtil

@@ -59,6 +59,7 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
     private val invalidUrls = mutableListOf<String>()
 
     private var waitingForEnvoy = false
+    private var envoyUnused = false
 
     // this receiver should be triggered by a success or failure broadcast from either the
     // NetworkIntentService (indicating whether submitted urls were valid or invalid) or the
@@ -80,6 +81,9 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
                             bundle.putString(EVENT_PARAM_DIRECT_URL, validUrl)
                             bundle.putString(EVENT_PARAM_DIRECT_SERVICE, validService)
                             eventHandler?.logEvent(EVENT_TAG_DIRECT, bundle)
+
+                            // set flag so resuming activity doesn't trigger another envoy check
+                            envoyUnused = true
 
                             Log.d(TAG, "got direct url: " + validUrl + ", don't need to start engine")
                         } else {
@@ -186,6 +190,9 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // reset in onCreate, check in onResume
+        envoyUnused = false
+
         // firebase logging
         if (Prefs.isFirebaseLoggingEnabled) {
             eventHandler = EventHandler(applicationContext)
@@ -230,7 +237,13 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
         super.onResume()
 
         // start cronet here to prevent exception from starting a service when out of focus
-        if (CronetNetworking.cronetEngine() != null) {
+        if (Prefs.isInitialOnboardingEnabled) {
+            // TODO: onCreate also checks the following before onboarding, is that necessary here?
+            // savedInstanceState == null && !intent.hasExtra(Constants.INTENT_EXTRA_IMPORT_READING_LISTS
+            Log.d(TAG, "user is likely doing onboarding, don't try to start envoy")
+        } else if (envoyUnused) {
+            Log.d(TAG, "direct connection previously worked, don't try to start envoy")
+        } else if (CronetNetworking.cronetEngine() != null) {
             Log.d(TAG, "cronet already running, don't try to start envoy again")
         } else if (waitingForEnvoy) {
             Log.d(TAG, "already processing urls, don't try to start envoy again")

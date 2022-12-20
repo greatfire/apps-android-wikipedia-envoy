@@ -8,6 +8,7 @@ import kotlinx.serialization.Serializable
 import org.wikipedia.dataclient.WikiSite
 import org.wikipedia.language.LanguageUtil
 import org.wikipedia.settings.SiteInfoClient
+import org.wikipedia.staticdata.ContributionsNameData
 import org.wikipedia.util.StringUtil
 import org.wikipedia.util.UriUtil
 import java.util.*
@@ -51,9 +52,13 @@ data class PageTitle(
     var namespace: String
         get() = _namespace.orEmpty()
         set(value) {
+            // Remove the current namespace from displayText, if it exists.
+            if (!_namespace.isNullOrEmpty() && !_displayText.isNullOrEmpty() && _displayText.orEmpty().startsWith(_namespace!!)) {
+                _displayText = StringUtil.removeNamespace(_displayText!!)
+            }
             _namespace = value
-            // TODO: fix the issue when entering an user talk page from a user page in PageActivity
-            _displayText = if (value.isEmpty()) _displayText else StringUtil.removeUnderscores(value) + ":" + _displayText
+            // And prepend the new namespace onto displayText.
+            _displayText = if (value.isEmpty() || _displayText.isNullOrEmpty()) _displayText else StringUtil.removeUnderscores(value) + ":" + _displayText
         }
 
     val isFilePage: Boolean
@@ -69,6 +74,11 @@ data class PageTitle(
         get() {
             val mainPageTitle = SiteInfoClient.getMainPageForLang(wikiSite.languageCode)
             return mainPageTitle == displayText
+        }
+
+    val isContributions: Boolean
+        get() {
+            return text.split('/').firstOrNull() == ContributionsNameData.valueFor(wikiSite.languageCode)
         }
 
     val uri: String
@@ -193,11 +203,20 @@ data class PageTitle(
         )
     }
 
-    fun matches(other: PageTitle?): Boolean {
-        return other != null &&
-                other.prefixedText == prefixedText &&
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is PageTitle) return false
+        return other.prefixedText == prefixedText &&
                 other.namespace == namespace &&
                 other.wikiSite.languageCode == wikiSite.languageCode
+    }
+
+    override fun hashCode(): Int {
+        var result = _namespace?.hashCode() ?: 0
+        result = 31 * result + wikiSite.languageCode.hashCode()
+        result = 31 * result + _text.hashCode()
+        result = 31 * result + (fragment?.hashCode() ?: 0)
+        return result
     }
 
     companion object {

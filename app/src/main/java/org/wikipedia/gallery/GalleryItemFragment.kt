@@ -1,13 +1,20 @@
 package org.wikipedia.gallery
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.drawable.Drawable
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.view.*
 import android.widget.MediaController
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.core.os.bundleOf
+import androidx.core.view.MenuProvider
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.Lifecycle
 import com.bumptech.glide.load.DataSource
 import com.bumptech.glide.load.engine.GlideException
 import com.bumptech.glide.request.RequestListener
@@ -29,8 +36,9 @@ import org.wikipedia.page.PageTitle
 import org.wikipedia.util.*
 import org.wikipedia.util.log.L
 import org.wikipedia.views.ViewUtil
+import kotlin.math.abs
 
-class GalleryItemFragment : Fragment(), RequestListener<Drawable?> {
+class GalleryItemFragment : Fragment(), MenuProvider, RequestListener<Drawable?> {
     interface Callback {
         fun onDownload(item: GalleryItemFragment)
         fun onShare(item: GalleryItemFragment, bitmap: Bitmap?, subject: String, title: PageTitle)
@@ -47,6 +55,14 @@ class GalleryItemFragment : Fragment(), RequestListener<Drawable?> {
     var mediaPage: MwQueryPage? = null
     val mediaInfo get() = mediaPage?.imageInfo()
 
+    private val requestPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted: Boolean ->
+        if (isGranted) {
+            saveImage()
+        } else {
+            FeedbackUtil.showMessage(requireActivity(), R.string.gallery_save_image_write_permission_rationale)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         mediaListItem = requireArguments().getParcelable(ARG_GALLERY_ITEM)!!
@@ -59,6 +75,7 @@ class GalleryItemFragment : Fragment(), RequestListener<Drawable?> {
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         _binding = FragmentGalleryItemBinding.inflate(inflater, container, false)
+        requireActivity().addMenuProvider(this, viewLifecycleOwner, Lifecycle.State.RESUMED)
 
         binding.image.setOnClickListener {
             if (!isAdded) {
@@ -66,24 +83,18 @@ class GalleryItemFragment : Fragment(), RequestListener<Drawable?> {
             }
             (requireActivity() as GalleryActivity).toggleControls()
         }
-        val imageScale = binding.image.scale
         binding.image.setOnMatrixChangeListener {
-            if (!isAdded) {
-                return@setOnMatrixChangeListener
+            if (isAdded) {
+                binding.image.setAllowParentInterceptOnEdge(abs(binding.image.scale - 1f) < 0.01f)
             }
-            (requireActivity() as GalleryActivity).setViewPagerEnabled(imageScale <= 1f)
         }
-        return binding.root
-    }
-
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        super.onViewCreated(view, savedInstanceState)
-        setHasOptionsMenu(true)
         loadMedia()
+        return binding.root
     }
 
     override fun onDestroyView() {
         disposables.clear()
+        binding.image.setOnMatrixChangeListener(null)
         binding.image.setOnClickListener(null)
         binding.videoThumbnail.setOnClickListener(null)
         _binding = null
@@ -104,8 +115,11 @@ class GalleryItemFragment : Fragment(), RequestListener<Drawable?> {
         binding.progressBar.visibility = if (visible) View.VISIBLE else View.GONE
     }
 
-    override fun onPrepareOptionsMenu(menu: Menu) {
-        super.onPrepareOptionsMenu(menu)
+    override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
+        menuInflater.inflate(R.menu.menu_gallery, menu)
+    }
+
+    override fun onPrepareMenu(menu: Menu) {
         if (!isAdded) {
             return
         }
@@ -116,38 +130,33 @@ class GalleryItemFragment : Fragment(), RequestListener<Drawable?> {
                 mediaInfo!!.thumbUrl.isNotEmpty() && binding.image.drawable != null
     }
 
-    override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
+    override fun onMenuItemSelected(item: MenuItem): Boolean {
+        return when (item.itemId) {
             R.id.menu_gallery_visit_image_page -> {
                 if (mediaInfo != null && imageTitle != null) {
                     startActivity(FilePageActivity.newIntent(requireContext(), imageTitle!!))
                 }
-                return true
+                true
             }
             R.id.menu_gallery_save -> {
                 handleImageSaveRequest()
-                return true
+                true
             }
             R.id.menu_gallery_share -> {
                 shareImage()
-                return true
+                true
             }
+            else -> false
         }
-        return super.onOptionsItemSelected(item)
     }
 
     private fun handleImageSaveRequest() {
-        if (!PermissionUtil.hasWriteExternalStoragePermission(requireActivity())) {
-            requestWriteExternalStoragePermission()
-        } else {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU ||
+            ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED) {
             saveImage()
+        } else {
+            requestPermissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
         }
-    }
-
-    private fun requestWriteExternalStoragePermission() {
-        PermissionUtil.requestWriteStorageRuntimePermissions(this,
-            Constants.ACTIVITY_REQUEST_WRITE_EXTERNAL_STORAGE_PERMISSION
-        )
     }
 
     private fun loadMedia() {
@@ -277,19 +286,6 @@ class GalleryItemFragment : Fragment(), RequestListener<Drawable?> {
                     }
                 }
             }[requireContext()]
-        }
-    }
-
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
-        if (requestCode == Constants.ACTIVITY_REQUEST_WRITE_EXTERNAL_STORAGE_PERMISSION) {
-            if (PermissionUtil.isPermitted(grantResults)) {
-                saveImage()
-            } else {
-                L.e("Write permission was denied by user")
-                FeedbackUtil.showMessage(requireActivity(), R.string.gallery_save_image_write_permission_rationale)
-            }
-        } else {
-            throw RuntimeException("unexpected permission request code $requestCode")
         }
     }
 

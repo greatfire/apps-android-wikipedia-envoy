@@ -1,5 +1,6 @@
 package org.wikipedia.talk
 
+import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
@@ -18,6 +19,7 @@ import androidx.recyclerview.widget.RecyclerView
 import org.wikipedia.Constants
 import org.wikipedia.R
 import org.wikipedia.activity.BaseActivity
+import org.wikipedia.analytics.LoginFunnel
 import org.wikipedia.analytics.TalkFunnel
 import org.wikipedia.auth.AccountUtil
 import org.wikipedia.databinding.ActivityTalkTopicBinding
@@ -27,6 +29,7 @@ import org.wikipedia.edit.EditHandler
 import org.wikipedia.edit.EditSectionActivity
 import org.wikipedia.history.HistoryEntry
 import org.wikipedia.history.SearchActionModeCallback
+import org.wikipedia.login.LoginActivity
 import org.wikipedia.page.*
 import org.wikipedia.page.linkpreview.LinkPreviewDialog
 import org.wikipedia.readinglist.AddToReadingListDialog
@@ -35,6 +38,7 @@ import org.wikipedia.settings.Prefs
 import org.wikipedia.staticdata.UserAliasData
 import org.wikipedia.util.*
 import org.wikipedia.views.SearchActionProvider
+import org.wikipedia.views.ViewUtil
 
 class TalkTopicActivity : BaseActivity(), LinkPreviewDialog.Callback {
     private lateinit var binding: ActivityTalkTopicBinding
@@ -55,6 +59,13 @@ class TalkTopicActivity : BaseActivity(), LinkPreviewDialog.Callback {
     private val requestEditSource = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         if (it.resultCode == EditHandler.RESULT_REFRESH_PAGE) {
             loadTopics()
+        }
+    }
+
+    private val requestLogin = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        if (it.resultCode == LoginActivity.RESULT_LOGIN_SUCCESS) {
+            viewModel.toggleSubscription()
+            FeedbackUtil.showMessage(this, R.string.login_success_toast)
         }
     }
 
@@ -284,7 +295,7 @@ class TalkTopicActivity : BaseActivity(), LinkPreviewDialog.Callback {
             if (position >= 0) {
                 binding.talkRecyclerView.post {
                     if (!isDestroyed) {
-                        binding.talkRecyclerView.smoothScrollToPosition(position)
+                        ViewUtil.jumpToPositionWithoutAnimation(binding.talkRecyclerView, position)
                         threadAdapter.notifyItemChanged(position)
                     }
                 }
@@ -321,7 +332,18 @@ class TalkTopicActivity : BaseActivity(), LinkPreviewDialog.Callback {
         }
 
         override fun onSubscribeClick() {
-            viewModel.toggleSubscription()
+            if (AccountUtil.isLoggedIn) {
+                viewModel.toggleSubscription()
+            } else {
+                AlertDialog.Builder(this@TalkTopicActivity)
+                    .setTitle(R.string.talk_login_to_subscribe_dialog_title)
+                    .setMessage(R.string.talk_login_to_subscribe_dialog_content)
+                    .setPositiveButton(R.string.login_join_wikipedia) { _, _ ->
+                        requestLogin.launch(LoginActivity.newIntent(this@TalkTopicActivity, LoginFunnel.SOURCE_SUBSCRIBE))
+                    }
+                    .setNegativeButton(R.string.onboarding_maybe_later, null)
+                    .show()
+            }
         }
     }
 
@@ -360,7 +382,7 @@ class TalkTopicActivity : BaseActivity(), LinkPreviewDialog.Callback {
         override fun onUserNameClick(item: ThreadItem, view: View) {
             UserTalkPopupHelper.show(this@TalkTopicActivity, bottomSheetPresenter,
                     PageTitle(UserAliasData.valueFor(viewModel.pageTitle.wikiSite.languageCode), item.author, viewModel.pageTitle.wikiSite),
-                    !AccountUtil.isLoggedIn, view, Constants.InvokeSource.TALK_ACTIVITY, HistoryEntry.SOURCE_TALK_TOPIC)
+                    !AccountUtil.isLoggedIn, view, Constants.InvokeSource.TALK_TOPIC_ACTIVITY, HistoryEntry.SOURCE_TALK_TOPIC)
         }
     }
 
@@ -404,14 +426,14 @@ class TalkTopicActivity : BaseActivity(), LinkPreviewDialog.Callback {
 
         override fun onInternalLinkClicked(title: PageTitle) {
             UserTalkPopupHelper.show(this@TalkTopicActivity, bottomSheetPresenter, title, false, lastX, lastY,
-                    Constants.InvokeSource.TALK_ACTIVITY, HistoryEntry.SOURCE_TALK_TOPIC)
+                    Constants.InvokeSource.TALK_TOPICS_ACTIVITY, HistoryEntry.SOURCE_TALK_TOPIC)
         }
     }
 
     private fun startReplyActivity(item: ThreadItem, undoSubject: CharSequence? = null, undoBody: CharSequence? = null) {
         talkFunnel.logReplyClick()
         replyResult.launch(TalkReplyActivity.newIntent(this@TalkTopicActivity, viewModel.pageTitle, viewModel.topic?.html,
-                item, Constants.InvokeSource.TALK_ACTIVITY, undoSubject, undoBody))
+                item, Constants.InvokeSource.TALK_TOPIC_ACTIVITY, undoSubject, undoBody))
     }
 
     private fun showUndoSnackbar(undoRevId: Long) {
@@ -435,7 +457,7 @@ class TalkTopicActivity : BaseActivity(), LinkPreviewDialog.Callback {
 
     override fun onLinkPreviewAddToList(title: PageTitle) {
         bottomSheetPresenter.show(supportFragmentManager,
-                AddToReadingListDialog.newInstance(title, Constants.InvokeSource.TALK_ACTIVITY))
+                AddToReadingListDialog.newInstance(title, Constants.InvokeSource.TALK_TOPIC_ACTIVITY))
     }
 
     override fun onLinkPreviewShareLink(title: PageTitle) {

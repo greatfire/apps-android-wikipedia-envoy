@@ -31,13 +31,14 @@ class LoginFunnel(app: WikipediaApp) : Funnel(app, SCHEMA_NAME, REVISION) {
 
     companion object {
         private const val SCHEMA_NAME = "MobileWikiAppLogin"
-        private const val REVISION = 20710032
+        private const val REVISION = 24000493
         const val SOURCE_NAV = "navigation"
         const val SOURCE_EDIT = "edit"
         const val SOURCE_BLOCKED = "blocked"
         const val SOURCE_SYSTEM = "system"
         const val SOURCE_ONBOARDING = "onboarding"
         const val SOURCE_SETTINGS = "settings"
+        const val SOURCE_SUBSCRIBE = "subscribe"
         const val SOURCE_READING_MANUAL_SYNC = "reading_lists_manual_sync"
         const val SOURCE_LOGOUT_BACKGROUND = "logout_background"
         const val SOURCE_SUGGESTED_EDITS = "suggestededits"

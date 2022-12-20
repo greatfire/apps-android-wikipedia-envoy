@@ -18,8 +18,8 @@ import androidx.recyclerview.widget.ConcatAdapter
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import kotlinx.coroutines.flow.collect
 import org.wikipedia.Constants
+import org.wikipedia.Constants.InvokeSource.TALK_TOPICS_ACTIVITY
 import org.wikipedia.R
 import org.wikipedia.WikipediaApp
 import org.wikipedia.activity.BaseActivity
@@ -147,7 +147,7 @@ class TalkTopicsActivity : BaseActivity(), WatchlistExpiryDialog.Callback {
 
         binding.talkNewTopicButton.setOnClickListener {
             funnel?.logNewTopicClick()
-            requestNewTopic.launch(TalkReplyActivity.newIntent(this@TalkTopicsActivity, viewModel.pageTitle, null, null, invokeSource))
+            requestNewTopic.launch(TalkReplyActivity.newIntent(this@TalkTopicsActivity, viewModel.pageTitle, null, null, TALK_TOPICS_ACTIVITY))
         }
 
         binding.talkRefreshView.setOnRefreshListener {
@@ -196,7 +196,7 @@ class TalkTopicsActivity : BaseActivity(), WatchlistExpiryDialog.Callback {
             menu.findItem(R.id.menu_change_language).isVisible = viewModel.pageTitle.namespace() == Namespace.USER_TALK
             menu.findItem(R.id.menu_read_article).isVisible = viewModel.pageTitle.namespace() != Namespace.USER_TALK && invokeSource != Constants.InvokeSource.ARCHIVED_TALK_ACTIVITY
             menu.findItem(R.id.menu_view_user_page).isVisible = viewModel.pageTitle.namespace() == Namespace.USER_TALK
-            menu.findItem(R.id.menu_view_user_page).title = getString(R.string.menu_option_user_page, StringUtil.removeNamespace(viewModel.pageTitle.displayText))
+            menu.findItem(R.id.menu_view_user_page).title = getString(R.string.menu_option_user_page, StringUtil.removeHTMLTags(StringUtil.removeNamespace(viewModel.pageTitle.displayText)))
 
             val notificationMenuItem = menu.findItem(R.id.menu_notifications)
             val watchMenuItem = menu.findItem(R.id.menu_watch)
@@ -231,7 +231,7 @@ class TalkTopicsActivity : BaseActivity(), WatchlistExpiryDialog.Callback {
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
             R.id.menu_change_language -> {
-                requestLanguageChange.launch(WikipediaLanguagesActivity.newIntent(this, Constants.InvokeSource.TALK_ACTIVITY))
+                requestLanguageChange.launch(WikipediaLanguagesActivity.newIntent(this, Constants.InvokeSource.TALK_TOPICS_ACTIVITY))
                 return true
             }
             R.id.menu_read_article, R.id.menu_view_user_page -> {
@@ -253,6 +253,7 @@ class TalkTopicsActivity : BaseActivity(), WatchlistExpiryDialog.Callback {
                 return true
             }
             R.id.menu_archive -> {
+                funnel?.logOpenArchive()
                 startActivity(ArchivedTalkPagesActivity.newIntent(this, viewModel.pageTitle))
                 return true
             }
@@ -351,6 +352,7 @@ class TalkTopicsActivity : BaseActivity(), WatchlistExpiryDialog.Callback {
     }
 
     private fun updateOnEmpty() {
+        binding.talkRefreshView.isRefreshing = false
         binding.talkEmptyContainer.isVisible = true
         binding.talkConditionContainer.isVisible = true
         // Allow them to create a new topic anyway
@@ -358,7 +360,7 @@ class TalkTopicsActivity : BaseActivity(), WatchlistExpiryDialog.Callback {
     }
 
     private fun updateOnUndoSave(undoneSubject: CharSequence, undoneBody: CharSequence) {
-        requestNewTopic.launch(TalkReplyActivity.newIntent(this@TalkTopicsActivity, viewModel.pageTitle, null, null, invokeSource, undoneSubject, undoneBody))
+        requestNewTopic.launch(TalkReplyActivity.newIntent(this@TalkTopicsActivity, viewModel.pageTitle, null, null, TALK_TOPICS_ACTIVITY, undoneSubject, undoneBody))
     }
 
     private fun updateOnWatch() {

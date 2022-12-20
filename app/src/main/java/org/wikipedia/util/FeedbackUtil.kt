@@ -15,6 +15,7 @@ import androidx.fragment.app.Fragment
 import com.google.android.material.snackbar.Snackbar
 import com.skydoves.balloon.*
 import org.wikipedia.R
+import org.wikipedia.WikipediaApp
 import org.wikipedia.activity.BaseActivity
 import org.wikipedia.analytics.SuggestedEditsFunnel
 import org.wikipedia.analytics.eventplatform.BreadCrumbLogEvent
@@ -23,13 +24,10 @@ import org.wikipedia.dataclient.WikiSite
 import org.wikipedia.main.MainActivity
 import org.wikipedia.page.LinkMovementMethodExt
 import org.wikipedia.page.PageActivity
-import org.wikipedia.page.PageTitle
 import org.wikipedia.page.edithistory.EditHistoryListActivity
 import org.wikipedia.random.RandomActivity
 import org.wikipedia.readinglist.ReadingListActivity
 import org.wikipedia.richtext.RichTextUtil
-import org.wikipedia.staticdata.SpecialAliasData
-import org.wikipedia.staticdata.UserAliasData
 import org.wikipedia.suggestededits.SuggestionsActivity
 import org.wikipedia.talk.TalkTopicsActivity
 
@@ -46,9 +44,9 @@ object FeedbackUtil {
         showToastOverView(v, v.contentDescription, LENGTH_SHORT)
     }
 
-    fun showError(activity: Activity, e: Throwable) {
+    fun showError(activity: Activity, e: Throwable, wikiSite: WikiSite = WikipediaApp.instance.wikiSite) {
         val error = ThrowableUtil.getAppError(activity, e)
-        makeSnackbar(activity, error.error).also {
+        makeSnackbar(activity, error.error, wikiSite = wikiSite).also {
             if (error.error.length > 200) {
                 it.duration = Snackbar.LENGTH_INDEFINITE
                 it.setAction(android.R.string.ok) { _ ->
@@ -104,18 +102,6 @@ object FeedbackUtil {
         UriUtil.visitInExternalBrowser(context, Uri.parse(context.getString(R.string.android_app_request_an_account_url)))
     }
 
-    fun showUserContributionsPage(context: Context, username: String, languageCode: String) {
-        val title = PageTitle(SpecialAliasData.valueFor(languageCode) + ":" +
-                "Contributions/" + username, WikiSite.forLanguageCode(languageCode))
-        UriUtil.visitInExternalBrowser(context, Uri.parse(title.uri))
-    }
-
-    fun showUserProfilePage(context: Context, username: String, languageCode: String) {
-        val title = PageTitle(UserAliasData.valueFor(languageCode) + ":" +
-                username, WikiSite.forLanguageCode(languageCode))
-        UriUtil.visitInExternalBrowser(context, Uri.parse(title.uri))
-    }
-
     fun showAndroidAppEditingFAQ(context: Context,
                                  @StringRes urlStr: Int = R.string.android_app_edit_help_url) {
         SuggestedEditsFunnel.get().helpOpened()
@@ -130,12 +116,12 @@ object FeedbackUtil {
         views.forEach { it.setOnClickListener(TOOLBAR_ON_CLICK_LISTENER) }
     }
 
-    fun makeSnackbar(activity: Activity, text: CharSequence, duration: Int = LENGTH_DEFAULT): Snackbar {
+    fun makeSnackbar(activity: Activity, text: CharSequence, duration: Int = LENGTH_DEFAULT, wikiSite: WikiSite = WikipediaApp.instance.wikiSite): Snackbar {
         val view = findBestView(activity)
         val snackbar = Snackbar.make(view, StringUtil.fromHtml(text.toString()), duration)
         val textView = snackbar.view.findViewById<TextView>(R.id.snackbar_text)
         textView.setLinkTextColor(ResourceUtil.getThemedColor(view.context, R.attr.color_group_52))
-        textView.movementMethod = LinkMovementMethodExt.getExternalLinkMovementMethod()
+        textView.movementMethod = LinkMovementMethodExt.getExternalLinkMovementMethod(wikiSite)
         RichTextUtil.removeUnderlinesFromLinks(textView)
         val actionView = snackbar.view.findViewById<TextView>(R.id.snackbar_action)
         actionView.setTextColor(ResourceUtil.getThemedColor(view.context, R.attr.color_group_52))
@@ -157,8 +143,8 @@ object FeedbackUtil {
     }
 
     fun showTooltip(activity: Activity, anchor: View, text: CharSequence, aboveOrBelow: Boolean,
-                    autoDismiss: Boolean, arrowAnchorPadding: Int = 0, topOrBottomMargin: Int = 0): Balloon {
-        return showTooltip(activity, getTooltip(anchor.context, text, autoDismiss, arrowAnchorPadding, topOrBottomMargin, aboveOrBelow), anchor, aboveOrBelow, autoDismiss)
+                    autoDismiss: Boolean, arrowAnchorPadding: Int = 0, topOrBottomMargin: Int = 0, showDismissButton: Boolean = autoDismiss): Balloon {
+        return showTooltip(activity, getTooltip(anchor.context, text, autoDismiss, arrowAnchorPadding, topOrBottomMargin, aboveOrBelow, showDismissButton), anchor, aboveOrBelow, autoDismiss)
     }
 
     fun showTooltip(activity: Activity, anchor: View, @LayoutRes layoutRes: Int,
@@ -191,7 +177,7 @@ object FeedbackUtil {
             setArrowDrawableResource(R.drawable.ic_tooltip_arrow_up)
             setArrowPositionRules(ArrowPositionRules.ALIGN_ANCHOR)
             setArrowOrientationRules(ArrowOrientationRules.ALIGN_ANCHOR)
-            setArrowSize(24)
+            setArrowSize(16)
             setMarginLeft(8)
             setMarginRight(8)
             setMarginTop(if (aboveOrBelow) 0 else topOrBottomMargin)

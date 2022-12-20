@@ -8,9 +8,9 @@ import android.text.TextWatcher
 import android.view.View
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.appcompat.app.AlertDialog
 import androidx.core.util.lruCache
 import androidx.core.view.isVisible
-import androidx.core.widget.ImageViewCompat
 import androidx.core.widget.doOnTextChanged
 import org.wikipedia.Constants
 import org.wikipedia.R
@@ -150,7 +150,7 @@ class TalkReplyActivity : BaseActivity(), LinkPreviewDialog.Callback, UserMentio
             binding.replySubjectLayout.isVisible = false
             binding.replyInputView.textInputLayout.hint = getString(R.string.talk_reply_hint)
             binding.talkScrollContainer.fullScroll(View.FOCUS_DOWN)
-            binding.replyInputView.maybePrepopulateUserName()
+            binding.replyInputView.maybePrepopulateUserName(AccountUtil.userName.orEmpty(), viewModel.pageTitle)
             binding.talkScrollContainer.post {
                 if (!isDestroyed) {
                     binding.replyInputView.editText.requestFocus()
@@ -203,14 +203,14 @@ class TalkReplyActivity : BaseActivity(), LinkPreviewDialog.Callback, UserMentio
 
         override fun onInternalLinkClicked(title: PageTitle) {
             UserTalkPopupHelper.show(this@TalkReplyActivity, bottomSheetPresenter, title, false, lastX, lastY,
-                    Constants.InvokeSource.TALK_ACTIVITY, HistoryEntry.SOURCE_TALK_TOPIC)
+                    Constants.InvokeSource.TALK_REPLY_ACTIVITY, HistoryEntry.SOURCE_TALK_TOPIC)
         }
     }
 
     private fun setSaveButtonEnabled(enabled: Boolean) {
         binding.replySaveButton.isEnabled = enabled
-        ImageViewCompat.setImageTintList(binding.replySaveButton, ResourceUtil.getThemedColorStateList(this,
-            if (enabled) R.attr.colorAccent else R.attr.material_theme_de_emphasised_color))
+        binding.replySaveButton.setTextColor(ResourceUtil
+            .getThemedColor(this, if (enabled) R.attr.colorAccent else R.attr.material_theme_de_emphasised_color))
     }
 
     private fun onSaveClicked() {
@@ -299,7 +299,7 @@ class TalkReplyActivity : BaseActivity(), LinkPreviewDialog.Callback, UserMentio
 
     override fun onLinkPreviewAddToList(title: PageTitle) {
         bottomSheetPresenter.show(supportFragmentManager,
-                AddToReadingListDialog.newInstance(title, Constants.InvokeSource.TALK_ACTIVITY))
+                AddToReadingListDialog.newInstance(title, Constants.InvokeSource.TALK_REPLY_ACTIVITY))
     }
 
     override fun onLinkPreviewShareLink(title: PageTitle) {
@@ -308,7 +308,18 @@ class TalkReplyActivity : BaseActivity(), LinkPreviewDialog.Callback, UserMentio
 
     override fun onBackPressed() {
         setResult(RESULT_BACK_FROM_TOPIC)
-        super.onBackPressed()
+        if (viewModel.isNewTopic && (!binding.replySubjectText.text.isNullOrEmpty() ||
+                    !binding.replyInputView.editText.text.isNullOrEmpty())) {
+            AlertDialog.Builder(this)
+                .setCancelable(false)
+                .setTitle(R.string.talk_new_topic_exit_dialog_title)
+                .setMessage(R.string.talk_new_topic_exit_dialog_message)
+                .setPositiveButton(R.string.edit_abandon_confirm_yes) { _, _ -> super.onBackPressed() }
+                .setNegativeButton(R.string.edit_abandon_confirm_no, null)
+                .show()
+        } else {
+            super.onBackPressed()
+        }
     }
 
     override fun onUserMentionListUpdate() {

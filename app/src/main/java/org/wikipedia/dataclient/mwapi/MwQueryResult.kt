@@ -9,6 +9,7 @@ import org.wikipedia.notifications.db.Notification.UnreadNotificationWikiItem
 import org.wikipedia.page.PageTitle
 import org.wikipedia.settings.SiteInfo
 import org.wikipedia.util.DateUtil
+import org.wikipedia.util.StringUtil
 import java.util.*
 
 @Serializable
@@ -24,9 +25,9 @@ class MwQueryResult {
 
     private val redirects: MutableList<Redirect>? = null
     private val converted: MutableList<ConvertedTitle>? = null
-    private val users: List<UserInfo>? = null
     private val tokens: Tokens? = null
     private val echomarkread: MarkReadResponse? = null
+    val users: List<UserInfo>? = null
     val pages: MutableList<MwQueryPage>? = null
     val echomarkseen: MarkReadResponse? = null
     val notifications: NotificationList? = null
@@ -64,12 +65,13 @@ class MwQueryResult {
     }
 
     fun captchaId(): String? {
-        return amInfo?.requests?.find { "CaptchaAuthenticationRequest" == it.id }?.fields?.get("captchaId")?.value
+        val key = "captchaId"
+        return amInfo?.requests?.find { it.fields?.containsKey(key) == true }?.fields?.get(key)?.value
     }
 
     fun getUserResponse(userName: String): UserInfo? {
         // MediaWiki user names are case sensitive, but the first letter is always capitalized.
-        return users?.find { userName.capitalize(Locale.getDefault()) == it.name }
+        return users?.find { StringUtil.capitalize(userName) == it.name }
     }
 
     fun langLinks(): MutableList<PageTitle> {
@@ -160,11 +162,11 @@ class MwQueryResult {
         @SerialName("new") private val isNew = false
         @SerialName("anon") val isAnon = false
         @SerialName("old_revid") private val oldRevid: Long = 0
-        private val pageid = 0
         private val timestamp: String? = null
         private val comment: String? = null
         private val minor = false
         private val bot = false
+        val pageId = 0
         val revid: Long = 0
         val ns = 0
         val title: String = ""

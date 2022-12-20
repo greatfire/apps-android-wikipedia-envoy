@@ -6,10 +6,10 @@ import org.wikipedia.test.MockRetrofitTest
 
 class FullTextSearchClientTest : MockRetrofitTest() {
     private val observable
-        get() = apiService.fullTextSearch("foo", BATCH_SIZE, null, null)
+        get() = apiService.fullTextSearchMedia("foo", BATCH_SIZE, null, null)
             .map { response ->
                 if (response.query != null) {
-                    return@map SearchResults(response.query!!.pages!!, TESTWIKI, response.continuation, null)
+                    return@map SearchResults(response.query!!.pages!!, TESTWIKI, response.continuation)
                 }
                 SearchResults()
             }

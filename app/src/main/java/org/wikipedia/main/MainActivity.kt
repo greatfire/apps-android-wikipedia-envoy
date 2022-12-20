@@ -4,8 +4,10 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.net.Uri
 import android.os.Bundle
 import android.util.Log
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.view.ActionMode
 import androidx.appcompat.widget.Toolbar
 import androidx.fragment.app.Fragment
@@ -16,9 +18,11 @@ import org.wikipedia.Constants
 import org.wikipedia.R
 import org.wikipedia.activity.SingleFragmentActivity
 import org.wikipedia.databinding.ActivityMainBinding
+import org.wikipedia.dataclient.WikiSite
 import org.wikipedia.events.EventHandler
 import org.wikipedia.navtab.NavTab
 import org.wikipedia.onboarding.InitialOnboardingActivity
+import org.wikipedia.page.PageActivity
 import org.wikipedia.settings.Prefs
 import org.wikipedia.util.DimenUtil
 import org.wikipedia.util.FeedbackUtil
@@ -54,6 +58,7 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
     private lateinit var binding: ActivityMainBinding
 
     private var controlNavTabInFragment = false
+    private val onboardingLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { }
 
     // add all string values to this list value
     private val listOfUrls = mutableListOf<String>()
@@ -92,6 +97,13 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
 
                             Log.d(TAG, "found a valid url: " + validUrl + ", start engine")
                             CronetNetworking.initializeCronetEngine(context, validUrl)
+
+                            if (fragment is MainFragment) {
+                                Log.d(TAG, "engine started, refresh main fragment")
+                                fragment.refreshFragment()
+                            } else {
+                                Log.d(TAG, "unexpected fragment class, can't refresh")
+                            }
                         }
                     } else {
 
@@ -231,20 +243,23 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
         }
 
         setImageZoomHelper()
-        if (Prefs.isInitialOnboardingEnabled && savedInstanceState == null) {
+        if (Prefs.isInitialOnboardingEnabled && savedInstanceState == null && !intent.hasExtra(Constants.INTENT_EXTRA_IMPORT_READING_LISTS)) {
             // Updating preference so the search multilingual tooltip
             // is not shown again for first time users
             Prefs.isMultilingualSearchTooltipShown = false
 
             // Use startActivityForResult to avoid preload the Feed contents before finishing the initial onboarding.
-            // The ACTIVITY_REQUEST_INITIAL_ONBOARDING has not been used in any onActivityResult
-            startActivityForResult(InitialOnboardingActivity.newIntent(this), Constants.ACTIVITY_REQUEST_INITIAL_ONBOARDING)
+            onboardingLauncher.launch(InitialOnboardingActivity.newIntent(this))
         }
         setNavigationBarColor(ResourceUtil.getThemedColor(this, R.attr.nav_tab_background_color))
         setSupportActionBar(binding.mainToolbar)
         supportActionBar?.title = ""
         supportActionBar?.setDisplayHomeAsUpEnabled(false)
         binding.mainToolbar.navigationIcon = null
+
+        if (savedInstanceState == null) {
+            handleIntent(intent)
+        }
     }
 
     override fun onStart() {
@@ -346,6 +361,21 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
             return
         }
         super.onBackPressed()
+    }
+
+    private fun handleIntent(intent: Intent) {
+        if (Intent.ACTION_VIEW == intent.action && intent.data != null) {
+            // TODO: handle special cases of non-article content, e.g. shared reading lists.
+            intent.data?.let {
+                if (it.authority.orEmpty().endsWith(WikiSite.BASE_DOMAIN)) {
+                    // Pass it right along to PageActivity
+                    val uri = Uri.parse(it.toString().replace("wikipedia://", WikiSite.DEFAULT_SCHEME + "://"))
+                    startActivity(Intent(this, PageActivity::class.java)
+                            .setAction(Intent.ACTION_VIEW)
+                            .setData(uri))
+                }
+            }
+        }
     }
 
     fun isCurrentFragmentSelected(f: Fragment): Boolean {

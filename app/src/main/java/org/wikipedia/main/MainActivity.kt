@@ -49,11 +49,11 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
     private val EVENT_PARAM_INVALID_URL = "invalid_url_value"
     private val EVENT_PARAM_INVALID_SERVICE = "invalid_url_service"
     private val EVENT_TAG_VALID_BATCH = "VALID_BATCH"
-    private val EVENT_PARAM_VALID_URLS = "valid_url_values"
-    private val EVENT_PARAM_VALID_SERVICES = "valid_url_services"
+    private val EVENT_PARAM_VALID_URLS = "valid_batch_urls"
+    private val EVENT_PARAM_VALID_SERVICES = "valid_batch_services"
     private val EVENT_TAG_INVALID_BATCH = "INVALID_BATCH"
-    private val EVENT_PARAM_INVALID_URLS = "invalid_url_values"
-    private val EVENT_PARAM_INVALID_SERVICES = "invalid_url_services"
+    private val EVENT_PARAM_INVALID_URLS = "invalid_batch_urls"
+    private val EVENT_PARAM_INVALID_SERVICES = "invalid_batch_services"
 
     private lateinit var binding: ActivityMainBinding
 

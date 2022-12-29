@@ -157,6 +157,8 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
                     if (urlBatch.isNullOrEmpty() || serviceBatch.isNullOrEmpty()) {
                         Log.e(TAG, "received an envoy batch succeeded broadcast with no urls/services")
                     } else {
+                        // TEMP - fix in next envoy release (direct urls should not be included in batch)
+                        urlBatch.removeAll(DIRECT_URL)
 
                         val bundle = Bundle()
                         // parameter limit is 100 characters, arrays not allowed

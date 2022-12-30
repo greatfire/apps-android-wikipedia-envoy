@@ -159,9 +159,10 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
                     } else {
                         // TEMP - fix in next envoy release (direct urls should not be included in batch)
                         urlBatch.removeAll(DIRECT_URL)
+
                         val bundle = Bundle()
                         // parameter limit is 100 characters, arrays not allowed
-                        bundle.putString(EVENT_PARAM_VALID_URLS, urlBatch.joinToString(separator = ",", transform={it.take(30)}))
+                        bundle.putString(EVENT_PARAM_VALID_URLS, urlBatch.joinToString(separator = ",", transform = { it.take(30) }))
                         bundle.putString(EVENT_PARAM_VALID_SERVICES, serviceBatch.joinToString(separator = ","))
                         eventHandler?.logEvent(EVENT_TAG_VALID_BATCH, bundle)
                     }
@@ -173,9 +174,10 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
                     } else {
                         // TEMP - fix in next envoy release (direct urls should not be included in batch)
                         urlBatch.removeAll(DIRECT_URL)
+                        
                         val bundle = Bundle()
                         // parameter limit is 100 characters, arrays not allowed
-                        bundle.putString(EVENT_PARAM_INVALID_URLS, urlBatch.joinToString(separator = ",", transform={it.take(30)}))
+                        bundle.putString(EVENT_PARAM_INVALID_URLS, urlBatch.joinToString(separator = ",", transform = { it.take(30) }))
                         bundle.putString(EVENT_PARAM_INVALID_SERVICES, serviceBatch.joinToString(separator = ","))
                         eventHandler?.logEvent(EVENT_TAG_INVALID_BATCH, bundle)
                     }

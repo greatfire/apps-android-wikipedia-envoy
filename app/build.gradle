@@ -354,7 +354,7 @@ dependencies {
     // implementation files('libs/IEnvoyProxy.aar')
     // use maven dependencies to support automation
     implementation 'org.greatfire.envoy:cronet:102.0.5005.41'
-    implementation 'org.greatfire:envoy:102.0.5005.41.5'
+    implementation 'org.greatfire:envoy:102.0.5005.41.6'
     implementation 'org.greatfire:IEnvoyProxy:1.2.1'
 }
 

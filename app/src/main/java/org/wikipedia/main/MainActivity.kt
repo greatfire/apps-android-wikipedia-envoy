@@ -48,6 +48,12 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
     private val EVENT_TAG_INVALID = "INVALID_URL"
     private val EVENT_PARAM_INVALID_URL = "invalid_url_value"
     private val EVENT_PARAM_INVALID_SERVICE = "invalid_url_service"
+    private val EVENT_TAG_VALID_BATCH = "VALID_BATCH"
+    private val EVENT_PARAM_VALID_URLS = "valid_batch_urls"
+    private val EVENT_PARAM_VALID_SERVICES = "valid_batch_services"
+    private val EVENT_TAG_INVALID_BATCH = "INVALID_BATCH"
+    private val EVENT_PARAM_INVALID_URLS = "invalid_batch_urls"
+    private val EVENT_PARAM_INVALID_SERVICES = "invalid_batch_services"
 
     private lateinit var binding: ActivityMainBinding
 
@@ -126,7 +132,6 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
 
                         Log.d(TAG, "got invalid url: " + invalidUrl)
                         invalidUrls.add(invalidUrl)
-                        // TODO: there isn't an obvious way to check unchecked/invalid counts when getting new urls from dnstt
                         if (waitingForEnvoy && (invalidUrls.size >= listOfUrls.size)) {
                             Log.e(TAG, "no urls left to try, cannot start envoy/cronet")
                             // TEMP: clearing this flag will cause any dnstt urls that follow to be ignored
@@ -134,6 +139,63 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
                         } else {
                             Log.e(TAG, "still trying urls, " + invalidUrls.size + " out of " + listOfUrls.size + " failed")
                         }
+                    }
+                } else if (intent.action == ENVOY_BROADCAST_VALIDATION_CONTINUED) {
+                    val extraUrls = intent.getStringArrayListExtra(ENVOY_DATA_URLS_CONTINUED)
+                    if (extraUrls.isNullOrEmpty()) {
+                        Log.e(TAG, "received an envoy continuation broadcast with no urls")
+                    } else {
+                        // TODO: failure state above may have triggered, revisit if dnstt becomes necessary
+                        extraUrls.forEach { url ->
+                            if (listOfUrls.contains(url)) {
+                                Log.d(TAG, "already validated additional url: " + url)
+                            } else {
+                                Log.d(TAG, "got additional url for validation: " + url)
+                                listOfUrls.add(url)
+                            }
+                        }
+                    }
+                } else if (intent.action == ENVOY_BROADCAST_BATCH_SUCCEEDED) {
+                    val urlBatch = intent.getStringArrayListExtra(ENVOY_DATA_BATCH_LIST)
+                    val serviceBatch = intent.getStringArrayListExtra(ENVOY_DATA_SERVICE_LIST)
+                    if (urlBatch.isNullOrEmpty() || serviceBatch.isNullOrEmpty()) {
+                        Log.e(TAG, "received an envoy batch succeeded broadcast with no urls/services")
+                    } else {
+                        // TEMP - fix in next envoy release (direct urls should not be included in batch)
+                        urlBatch.removeAll(DIRECT_URL)
+
+                        val bundle = Bundle()
+                        // parameter limit is 100 characters, arrays not allowed
+                        bundle.putString(
+                            EVENT_PARAM_VALID_URLS,
+                            urlBatch.joinToString(separator = ",", transform = { it.take(30) })
+                        )
+                        bundle.putString(
+                            EVENT_PARAM_VALID_SERVICES,
+                            serviceBatch.joinToString(separator = ",")
+                        )
+                        eventHandler?.logEvent(EVENT_TAG_VALID_BATCH, bundle)
+                    }
+                } else if (intent.action == ENVOY_BROADCAST_BATCH_FAILED) {
+                    val urlBatch = intent.getStringArrayListExtra(ENVOY_DATA_BATCH_LIST)
+                    val serviceBatch = intent.getStringArrayListExtra(ENVOY_DATA_SERVICE_LIST)
+                    if (urlBatch.isNullOrEmpty() || serviceBatch.isNullOrEmpty()) {
+                        Log.e(TAG, "received an envoy batch failed broadcast with no urls/services")
+                    } else {
+                        // TEMP - fix in next envoy release (direct urls should not be included in batch)
+                        urlBatch.removeAll(DIRECT_URL)
+
+                        val bundle = Bundle()
+                        // parameter limit is 100 characters, arrays not allowed
+                        bundle.putString(
+                            EVENT_PARAM_INVALID_URLS,
+                            urlBatch.joinToString(separator = ",", transform = { it.take(30) })
+                        )
+                        bundle.putString(
+                            EVENT_PARAM_INVALID_SERVICES,
+                            serviceBatch.joinToString(separator = ",")
+                        )
+                        eventHandler?.logEvent(EVENT_TAG_INVALID_BATCH, bundle)
                     }
                 } else {
                     Log.e(TAG, "received unexpected intent: " + intent.action)
@@ -229,7 +291,10 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
         // register to receive test results
         LocalBroadcastManager.getInstance(this).registerReceiver(mBroadcastReceiver, IntentFilter().apply {
             addAction(ENVOY_BROADCAST_VALIDATION_SUCCEEDED)
+            addAction(ENVOY_BROADCAST_VALIDATION_CONTINUED)
             addAction(ENVOY_BROADCAST_VALIDATION_FAILED)
+            addAction(ENVOY_BROADCAST_BATCH_SUCCEEDED)
+            addAction(ENVOY_BROADCAST_BATCH_FAILED)
         })
     }
 

@@ -50,9 +50,9 @@ android {
         targetSdkVersion 33
         // current: targetSdkVersion 31
         // TODO: update versionName with each release
-        versionName "3.8"
+        versionName "3.9"
         // TODO: update versionCode with each PR
-        versionCode 100381
+        versionCode 100390
         testApplicationId 'org.greatfire.wikiunblocked.test'
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         testInstrumentationRunnerArguments clearPackageData: 'true'
@@ -177,7 +177,7 @@ android {
         fdroid {
             applicationId 'org.greatfire.wikiunblocked.fdroid'
             // static string for fdroid repo
-            versionName '3.8-fdroid'
+            versionName '3.9-fdroid'
             // TODO: see above re: signing code
             // signingConfig signingConfigs.prod
         }
@@ -354,7 +354,7 @@ dependencies {
     // implementation files('libs/IEnvoyProxy.aar')
     // use maven dependencies to support automation
     implementation 'org.greatfire.envoy:cronet:102.0.5005.41'
-    implementation 'org.greatfire:envoy:102.0.5005.41.6'
+    implementation 'org.greatfire:envoy:102.0.5005.41.7'
     implementation 'org.greatfire:IEnvoyProxy:1.2.1'
 }
 

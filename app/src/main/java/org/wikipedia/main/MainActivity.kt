@@ -74,135 +74,163 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent != null && context != null) {
                 if (intent.action == ENVOY_BROADCAST_VALIDATION_SUCCEEDED) {
-                    val validUrl = intent.getStringExtra(ENVOY_DATA_URL_SUCCEEDED)
-                    val validService = intent.getStringExtra(ENVOY_DATA_SERVICE_SUCCEEDED)
-                    if (validUrl.isNullOrEmpty()) {
-                        Log.e(TAG, "received a valid url that was empty or null")
-                    } else if (waitingForEnvoy) {
-                        waitingForEnvoy = false
-                        // select the first url that is returned (assumed to have the lowest latency)
-                        if (DIRECT_URL.contains(validUrl)) {
-
-                            val bundle = Bundle()
-                            bundle.putString(EVENT_PARAM_DIRECT_URL, validUrl)
-                            bundle.putString(EVENT_PARAM_DIRECT_SERVICE, validService)
-                            eventHandler?.logEvent(EVENT_TAG_DIRECT, bundle)
-
-                            // set flag so resuming activity doesn't trigger another envoy check
-                            envoyUnused = true
-
-                            Log.d(TAG, "got direct url: " + validUrl + ", don't need to start engine")
-                        } else {
-
-                            val bundle = Bundle()
-                            bundle.putString(EVENT_PARAM_SELECT_URL, validUrl)
-                            bundle.putString(EVENT_PARAM_SELECT_SERVICE, validService)
-                            eventHandler?.logEvent(EVENT_TAG_SELECT, bundle)
-
-                            Log.d(TAG, "found a valid url: " + validUrl + ", start engine")
-                            CronetNetworking.initializeCronetEngine(context, validUrl)
-
-                            if (fragment is MainFragment) {
-                                Log.d(TAG, "engine started, refresh main fragment")
-                                fragment.refreshFragment()
-                            } else {
-                                Log.d(TAG, "unexpected fragment class, can't refresh")
-                            }
-                        }
-                    } else {
-
-                        val bundle = Bundle()
-                        bundle.putString(EVENT_PARAM_VALID_URL, validUrl)
-                        bundle.putString(EVENT_PARAM_VALID_SERVICE, validService)
-                        eventHandler?.logEvent(EVENT_TAG_VALID, bundle)
-
-                        Log.d(TAG, "already selected a valid url, ignore valid url: " + validUrl)
-                    }
+                    initializeCronet(context)
                 } else if (intent.action == ENVOY_BROADCAST_VALIDATION_FAILED) {
-                    val invalidUrl = intent.getStringExtra(ENVOY_DATA_URL_FAILED)
-                    val invalidService = intent.getStringExtra(ENVOY_DATA_SERVICE_FAILED)
-                    if (invalidUrl.isNullOrEmpty()) {
-                        Log.e(TAG, "received an invalid url that was empty or null")
-                    } else {
-
-                        val bundle = Bundle()
-                        bundle.putString(EVENT_PARAM_INVALID_URL, invalidUrl)
-                        bundle.putString(EVENT_PARAM_INVALID_SERVICE, invalidService)
-                        eventHandler?.logEvent(EVENT_TAG_INVALID, bundle)
-
-                        Log.d(TAG, "got invalid url: " + invalidUrl)
-                        invalidUrls.add(invalidUrl)
-                        if (waitingForEnvoy && (invalidUrls.size >= listOfUrls.size)) {
-                            Log.e(TAG, "no urls left to try, cannot start envoy/cronet")
-                            // TEMP: clearing this flag will cause any dnstt urls that follow to be ignored
-                            waitingForEnvoy = false
-                        } else {
-                            Log.e(TAG, "still trying urls, " + invalidUrls.size + " out of " + listOfUrls.size + " failed")
-                        }
-                    }
+                    checkForInvalidUrls()
                 } else if (intent.action == ENVOY_BROADCAST_VALIDATION_CONTINUED) {
-                    val extraUrls = intent.getStringArrayListExtra(ENVOY_DATA_URLS_CONTINUED)
-                    if (extraUrls.isNullOrEmpty()) {
-                        Log.e(TAG, "received an envoy continuation broadcast with no urls")
-                    } else {
-                        // TODO: failure state above may have triggered, revisit if dnstt becomes necessary
-                        extraUrls.forEach { url ->
-                            if (listOfUrls.contains(url)) {
-                                Log.d(TAG, "already validated additional url: " + url)
-                            } else {
-                                Log.d(TAG, "got additional url for validation: " + url)
-                                listOfUrls.add(url)
-                            }
-                        }
-                    }
+                    addExtraUrlsToListOfUrls()
                 } else if (intent.action == ENVOY_BROADCAST_BATCH_SUCCEEDED) {
-                    val urlBatch = intent.getStringArrayListExtra(ENVOY_DATA_BATCH_LIST)
-                    val serviceBatch = intent.getStringArrayListExtra(ENVOY_DATA_SERVICE_LIST)
-                    if (urlBatch.isNullOrEmpty() || serviceBatch.isNullOrEmpty()) {
-                        Log.e(TAG, "received an envoy batch succeeded broadcast with no urls/services")
-                    } else {
-                        // TEMP - fix in next envoy release (direct urls should not be included in batch)
-                        urlBatch.removeAll(DIRECT_URL)
-
-                        val bundle = Bundle()
-                        // parameter limit is 100 characters, arrays not allowed
-                        bundle.putString(
-                            EVENT_PARAM_VALID_URLS,
-                            urlBatch.joinToString(separator = ",", transform = { it.take(30) })
-                        )
-                        bundle.putString(
-                            EVENT_PARAM_VALID_SERVICES,
-                            serviceBatch.joinToString(separator = ",")
-                        )
-                        eventHandler?.logEvent(EVENT_TAG_VALID_BATCH, bundle)
-                    }
+                    removeAllDirectUrls()
                 } else if (intent.action == ENVOY_BROADCAST_BATCH_FAILED) {
-                    val urlBatch = intent.getStringArrayListExtra(ENVOY_DATA_BATCH_LIST)
-                    val serviceBatch = intent.getStringArrayListExtra(ENVOY_DATA_SERVICE_LIST)
-                    if (urlBatch.isNullOrEmpty() || serviceBatch.isNullOrEmpty()) {
-                        Log.e(TAG, "received an envoy batch failed broadcast with no urls/services")
-                    } else {
-                        // TEMP - fix in next envoy release (direct urls should not be included in batch)
-                        urlBatch.removeAll(DIRECT_URL)
-
-                        val bundle = Bundle()
-                        // parameter limit is 100 characters, arrays not allowed
-                        bundle.putString(
-                            EVENT_PARAM_INVALID_URLS,
-                            urlBatch.joinToString(separator = ",", transform = { it.take(30) })
-                        )
-                        bundle.putString(
-                            EVENT_PARAM_INVALID_SERVICES,
-                            serviceBatch.joinToString(separator = ",")
-                        )
-                        eventHandler?.logEvent(EVENT_TAG_INVALID_BATCH, bundle)
-                    }
+                    envoyBatchFailed()
                 } else {
                     Log.e(TAG, "received unexpected intent: " + intent.action)
                 }
             } else {
                 Log.e(TAG, "receiver triggered but context or intent was null")
             }
+        }
+    }
+
+
+//    ---------
+//    // add all string values to this list value
+//    private val listOfUrls = mutableListOf<String>()
+//    private val invalidUrls = mutableListOf<String>()
+//
+//    private var waitingForEnvoy = false
+//    private var envoyUnused = false
+
+    private fun initializeCronet(context: Context) {
+        val validUrl = intent.getStringExtra(ENVOY_DATA_URL_SUCCEEDED)
+        val validService = intent.getStringExtra(ENVOY_DATA_SERVICE_SUCCEEDED)
+        if (validUrl.isNullOrEmpty()) {
+            Log.e(TAG, "received a valid url that was empty or null")
+        } else if (waitingForEnvoy) {
+            waitingForEnvoy = false
+            // select the first url that is returned (assumed to have the lowest latency)
+            if (DIRECT_URL.contains(validUrl)) {
+
+                val bundle = Bundle()
+                bundle.putString(EVENT_PARAM_DIRECT_URL, validUrl)
+                bundle.putString(EVENT_PARAM_DIRECT_SERVICE, validService)
+                eventHandler?.logEvent(EVENT_TAG_DIRECT, bundle)
+
+                // set flag so resuming activity doesn't trigger another envoy check
+                envoyUnused = true
+
+                Log.d(TAG, "got direct url: " + validUrl + ", don't need to start engine")
+            } else {
+                val bundle = Bundle()
+                bundle.putString(EVENT_PARAM_SELECT_URL, validUrl)
+                bundle.putString(EVENT_PARAM_SELECT_SERVICE, validService)
+                eventHandler?.logEvent(EVENT_TAG_SELECT, bundle)
+
+                Log.d(TAG, "found a valid url: " + validUrl + ", start engine")
+                CronetNetworking.initializeCronetEngine(context, validUrl)
+
+                if (fragment is MainFragment) {
+                    Log.d(TAG, "engine started, refresh main fragment")
+                    fragment.refreshFragment()
+                } else {
+                    Log.d(TAG, "unexpected fragment class, can't refresh")
+                }
+            }
+        } else {
+
+            val bundle = Bundle()
+            bundle.putString(EVENT_PARAM_VALID_URL, validUrl)
+            bundle.putString(EVENT_PARAM_VALID_SERVICE, validService)
+            eventHandler?.logEvent(EVENT_TAG_VALID, bundle)
+
+            Log.d(TAG, "already selected a valid url, ignore valid url: " + validUrl)
+        }
+    }
+
+    private fun checkForInvalidUrls() {
+        val invalidUrl = intent.getStringExtra(ENVOY_DATA_URL_FAILED)
+        val invalidService = intent.getStringExtra(ENVOY_DATA_SERVICE_FAILED)
+        if (invalidUrl.isNullOrEmpty()) {
+            Log.e(TAG, "received an invalid url that was empty or null")
+        } else {
+
+            val bundle = Bundle()
+            bundle.putString(EVENT_PARAM_INVALID_URL, invalidUrl)
+            bundle.putString(EVENT_PARAM_INVALID_SERVICE, invalidService)
+            eventHandler?.logEvent(EVENT_TAG_INVALID, bundle)
+
+            Log.d(TAG, "got invalid url: " + invalidUrl)
+            invalidUrls.add(invalidUrl)
+            if (waitingForEnvoy && (invalidUrls.size >= listOfUrls.size)) {
+                Log.e(TAG, "no urls left to try, cannot start envoy/cronet")
+                // TEMP: clearing this flag will cause any dnstt urls that follow to be ignored
+                waitingForEnvoy = false
+            } else {
+                Log.e(TAG, "still trying urls, " + invalidUrls.size + " out of " + listOfUrls.size + " failed")
+            }
+        }
+    }
+
+    private fun addExtraUrlsToListOfUrls() {
+        val extraUrls = intent.getStringArrayListExtra(ENVOY_DATA_URLS_CONTINUED)
+        if (extraUrls.isNullOrEmpty()) {
+            Log.e(TAG, "received an envoy continuation broadcast with no urls")
+        } else {
+            // TODO: failure state above may have triggered, revisit if dnstt becomes necessary
+            extraUrls.forEach { url ->
+                if (listOfUrls.contains(url)) {
+                    Log.d(TAG, "already validated additional url: " + url)
+                } else {
+                    Log.d(TAG, "got additional url for validation: " + url)
+                    listOfUrls.add(url)
+                }
+            }
+        }
+    }
+
+    private fun removeAllDirectUrls() {
+        val urlBatch = intent.getStringArrayListExtra(ENVOY_DATA_BATCH_LIST)
+        val serviceBatch = intent.getStringArrayListExtra(ENVOY_DATA_SERVICE_LIST)
+        if (urlBatch.isNullOrEmpty() || serviceBatch.isNullOrEmpty()) {
+            Log.e(TAG, "received an envoy batch succeeded broadcast with no urls/services")
+        } else {
+            // TEMP - fix in next envoy release (direct urls should not be included in batch)
+            urlBatch.removeAll(DIRECT_URL)
+
+            val bundle = Bundle()
+            // parameter limit is 100 characters, arrays not allowed
+            bundle.putString(
+                EVENT_PARAM_VALID_URLS,
+                urlBatch.joinToString(separator = ",", transform = { it.take(30) })
+            )
+            bundle.putString(
+                EVENT_PARAM_VALID_SERVICES,
+                serviceBatch.joinToString(separator = ",")
+            )
+            eventHandler?.logEvent(EVENT_TAG_VALID_BATCH, bundle)
+        }
+    }
+
+    private fun envoyBatchFailed() {
+        val urlBatch = intent.getStringArrayListExtra(ENVOY_DATA_BATCH_LIST)
+        val serviceBatch = intent.getStringArrayListExtra(ENVOY_DATA_SERVICE_LIST)
+        if (urlBatch.isNullOrEmpty() || serviceBatch.isNullOrEmpty()) {
+            Log.e(TAG, "received an envoy batch failed broadcast with no urls/services")
+        } else {
+            // TEMP - fix in next envoy release (direct urls should not be included in batch)
+            urlBatch.removeAll(DIRECT_URL)
+
+            val bundle = Bundle()
+            // parameter limit is 100 characters, arrays not allowed
+            bundle.putString(
+                EVENT_PARAM_INVALID_URLS,
+                urlBatch.joinToString(separator = ",", transform = { it.take(30) })
+            )
+            bundle.putString(
+                EVENT_PARAM_INVALID_SERVICES,
+                serviceBatch.joinToString(separator = ",")
+            )
+            eventHandler?.logEvent(EVENT_TAG_INVALID_BATCH, bundle)
         }
     }
 

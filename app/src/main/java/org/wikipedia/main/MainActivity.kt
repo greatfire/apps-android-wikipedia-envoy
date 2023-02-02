@@ -14,6 +14,7 @@ import androidx.fragment.app.Fragment
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import org.greatfire.envoy.*
 import org.greatfire.wikiunblocked.Secrets
+import org.wikipedia.BuildConfig
 import org.wikipedia.Constants
 import org.wikipedia.R
 import org.wikipedia.activity.SingleFragmentActivity
@@ -67,6 +68,9 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
     private var waitingForEnvoy = false
     private var envoyUnused = false
 
+    private val validServices = mutableListOf<String>()
+    private val invalidServices = mutableListOf<String>()
+
     // this receiver should be triggered by a success or failure broadcast from either the
     // NetworkIntentService (indicating whether submitted urls were valid or invalid) or the
     // ShadowsocksService (indicating whether the service was successfully started or not
@@ -76,6 +80,12 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
                 if (intent.action == ENVOY_BROADCAST_VALIDATION_SUCCEEDED) {
                     val validUrl = intent.getStringExtra(ENVOY_DATA_URL_SUCCEEDED)
                     val validService = intent.getStringExtra(ENVOY_DATA_SERVICE_SUCCEEDED)
+
+                    if(BuildConfig.BUILD_TYPE == "debug" && !validService.isNullOrEmpty()) {
+                        validServices.add(validService + " - " + validUrl)
+                        Prefs.validServices = validServices
+                    }
+
                     if (validUrl.isNullOrEmpty()) {
                         Log.e(TAG, "received a valid url that was empty or null")
                     } else if (waitingForEnvoy) {
@@ -121,6 +131,12 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
                 } else if (intent.action == ENVOY_BROADCAST_VALIDATION_FAILED) {
                     val invalidUrl = intent.getStringExtra(ENVOY_DATA_URL_FAILED)
                     val invalidService = intent.getStringExtra(ENVOY_DATA_SERVICE_FAILED)
+
+                    if(BuildConfig.BUILD_TYPE == "debug" && !invalidService.isNullOrEmpty()) {
+                        invalidServices.add(invalidService + " - " + invalidUrl)
+                        Prefs.invalidServices = invalidServices
+                    }
+
                     if (invalidUrl.isNullOrEmpty()) {
                         Log.e(TAG, "received an invalid url that was empty or null")
                     } else {
@@ -215,6 +231,13 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
 
         listOfUrls.clear()
         invalidUrls.clear()
+
+        if(BuildConfig.BUILD_TYPE == "debug") {
+            validServices.clear()
+            Prefs.validServices = validServices
+            invalidServices.clear()
+            Prefs.invalidServices = invalidServices
+        }
 
         // secrets don't support fdroid package name
         val shortPackage = packageName.removeSuffix(".fdroid")

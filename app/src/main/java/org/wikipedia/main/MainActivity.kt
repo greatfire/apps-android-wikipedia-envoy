@@ -227,10 +227,10 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
                4. dot address
                (either 4 or 5 should be an empty string) */
         val dnsttConfig = mutableListOf<String>()
-        if (Secrets().getdnsttdomain(shortPackage).isNullOrEmpty()
-            || Secrets().getdnsttkey(shortPackage).isNullOrEmpty()
-            || Secrets().getdnsttpath(shortPackage).isNullOrEmpty()
-            || (Secrets().getdohUrl(shortPackage).isNullOrEmpty() && Secrets().getdotAddr(shortPackage).isNullOrEmpty())) {
+        if (Secrets().getdnsttdomain(shortPackage).isNullOrEmpty() ||
+            Secrets().getdnsttkey(shortPackage).isNullOrEmpty() ||
+            Secrets().getdnsttpath(shortPackage).isNullOrEmpty() ||
+            (Secrets().getdohUrl(shortPackage).isNullOrEmpty() && Secrets().getdotAddr(shortPackage).isNullOrEmpty())) {
             Log.w(TAG, "some dnstt parameters are missing, can't submit dnstt config to envoy")
         } else {
             dnsttConfig.add(Secrets().getdnsttdomain(shortPackage))

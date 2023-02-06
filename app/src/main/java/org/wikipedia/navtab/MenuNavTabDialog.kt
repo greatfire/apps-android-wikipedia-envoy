@@ -123,7 +123,7 @@ class MenuNavTabDialog : ExtendedBottomSheetDialogFragment() {
         }
 
         // check proxy state
-        if(BuildConfig.BUILD_TYPE == "debug") {
+        if (BuildConfig.BUILD_TYPE == "debug") {
             binding.mainDrawerProxyContainer.visibility = View.GONE
             binding.mainDrawerValidContainer.visibility = View.VISIBLE
             binding.mainDrawerInvalidContainer.visibility = View.VISIBLE

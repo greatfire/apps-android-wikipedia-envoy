@@ -81,7 +81,7 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
                     val validUrl = intent.getStringExtra(ENVOY_DATA_URL_SUCCEEDED)
                     val validService = intent.getStringExtra(ENVOY_DATA_SERVICE_SUCCEEDED)
 
-                    if(BuildConfig.BUILD_TYPE == "debug" && !validService.isNullOrEmpty()) {
+                    if (BuildConfig.BUILD_TYPE == "debug" && !validService.isNullOrEmpty()) {
                         validServices.add(validService + " - " + validUrl)
                         Prefs.validServices = validServices
                     }
@@ -132,7 +132,7 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
                     val invalidUrl = intent.getStringExtra(ENVOY_DATA_URL_FAILED)
                     val invalidService = intent.getStringExtra(ENVOY_DATA_SERVICE_FAILED)
 
-                    if(BuildConfig.BUILD_TYPE == "debug" && !invalidService.isNullOrEmpty()) {
+                    if (BuildConfig.BUILD_TYPE == "debug" && !invalidService.isNullOrEmpty()) {
                         invalidServices.add(invalidService + " - " + invalidUrl)
                         Prefs.invalidServices = invalidServices
                     }
@@ -232,7 +232,7 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
         listOfUrls.clear()
         invalidUrls.clear()
 
-        if(BuildConfig.BUILD_TYPE == "debug") {
+        if (BuildConfig.BUILD_TYPE == "debug") {
             validServices.clear()
             Prefs.validServices = validServices
             invalidServices.clear()

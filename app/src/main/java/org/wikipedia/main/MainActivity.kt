@@ -250,14 +250,26 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
                4. dot address
                (either 4 or 5 should be an empty string) */
         val dnsttConfig = mutableListOf<String>()
-        dnsttConfig.add(Secrets().getdnsttdomain(shortPackage))
-        dnsttConfig.add(Secrets().getdnsttkey(shortPackage))
-        dnsttConfig.add(Secrets().getdnsttpath(shortPackage))
-        dnsttConfig.add(Secrets().getdohUrl(shortPackage))
-        dnsttConfig.add(Secrets().getdotAddr(shortPackage))
+        if (Secrets().getdnsttdomain(shortPackage).isNullOrEmpty() ||
+            Secrets().getdnsttkey(shortPackage).isNullOrEmpty() ||
+            Secrets().getdnsttpath(shortPackage).isNullOrEmpty() ||
+            (Secrets().getdohUrl(shortPackage).isNullOrEmpty() && Secrets().getdotAddr(shortPackage).isNullOrEmpty())) {
+            Log.w(TAG, "some dnstt parameters are missing, can't submit dnstt config to envoy")
+        } else {
+            dnsttConfig.add(Secrets().getdnsttdomain(shortPackage))
+            dnsttConfig.add(Secrets().getdnsttkey(shortPackage))
+            dnsttConfig.add(Secrets().getdnsttpath(shortPackage))
+            dnsttConfig.add(Secrets().getdohUrl(shortPackage))
+            dnsttConfig.add(Secrets().getdotAddr(shortPackage))
+        }
 
         if (Secrets().getdefProxy(shortPackage).isNullOrEmpty()) {
-            Log.w(TAG, "no default proxy urls found, submit empty list to check dnstt for urls")
+            if (dnsttConfig.isNullOrEmpty()) {
+                Log.w(TAG, "no default proxy urls found and no dnstt config provided, cannot proceed")
+                return
+            } else {
+                Log.w(TAG, "no default proxy urls found, submit empty list to check dnstt for urls")
+            }
         } else {
             Log.d(TAG, "found default proxy urls: " + Secrets().getdefProxy(shortPackage))
             listOfUrls.addAll(Secrets().getdefProxy(shortPackage).split(","))

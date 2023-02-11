@@ -16,6 +16,7 @@ import org.wikipedia.analytics.eventplatform.BreadCrumbLogEvent
 import org.wikipedia.auth.AccountUtil
 import org.wikipedia.databinding.ViewMainDrawerBinding
 import org.wikipedia.page.ExtendedBottomSheetDialogFragment
+import org.wikipedia.settings.Prefs
 import org.wikipedia.util.DimenUtil.getDimension
 import org.wikipedia.util.DimenUtil.roundedDpToPx
 import org.wikipedia.util.ResourceUtil.getThemedColorStateList
@@ -122,12 +123,29 @@ class MenuNavTabDialog : ExtendedBottomSheetDialogFragment() {
         }
 
         // check proxy state
-        if (CronetNetworking.cronetEngine() == null) {
-            binding.mainDrawerProxyOn.visibility = View.GONE
-            binding.mainDrawerProxyOff.visibility = View.VISIBLE
+        if (BuildConfig.BUILD_TYPE == "debug") {
+            binding.mainDrawerProxyContainer.visibility = View.GONE
+            binding.mainDrawerValidContainer.visibility = View.VISIBLE
+            binding.mainDrawerInvalidContainer.visibility = View.VISIBLE
+            var validString = Prefs.validServices.toString().removePrefix("[").removeSuffix("]").replace(", ", "\n")
+            if (!validString.isNullOrEmpty()) {
+                binding.mainDrawerValidText.text = validString
+            }
+            var invalidString = Prefs.invalidServices.toString().removePrefix("[").removeSuffix("]").replace(", ", "\n")
+            if (!invalidString.isNullOrEmpty()) {
+                binding.mainDrawerInvalidText.text = invalidString
+            }
         } else {
-            binding.mainDrawerProxyOn.visibility = View.VISIBLE
-            binding.mainDrawerProxyOff.visibility = View.GONE
+            binding.mainDrawerProxyContainer.visibility = View.VISIBLE
+            binding.mainDrawerValidContainer.visibility = View.GONE
+            binding.mainDrawerInvalidContainer.visibility = View.GONE
+            if (CronetNetworking.cronetEngine() == null) {
+                binding.mainDrawerProxyOn.visibility = View.GONE
+                binding.mainDrawerProxyOff.visibility = View.VISIBLE
+            } else {
+                binding.mainDrawerProxyOn.visibility = View.VISIBLE
+                binding.mainDrawerProxyOff.visibility = View.GONE
+            }
         }
     }
 

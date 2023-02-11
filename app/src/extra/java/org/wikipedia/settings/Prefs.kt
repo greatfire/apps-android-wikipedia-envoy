@@ -676,4 +676,14 @@ object Prefs {
     var readingListRecentReceivedId
         get() = PrefsIoUtil.getLong(R.string.preference_key_reading_lists_recent_receive_id, -1)
         set(value) = PrefsIoUtil.setLong(R.string.preference_key_reading_lists_recent_receive_id, value)
+
+    var validServices
+        get() = JsonUtil.decodeFromString<List<String>>(PrefsIoUtil.getString(R.string.preference_key_valid_services, null))
+            ?: emptyList()
+        set(list) = PrefsIoUtil.setString(R.string.preference_key_valid_services, JsonUtil.encodeToString(list))
+
+    var invalidServices
+        get() = JsonUtil.decodeFromString<List<String>>(PrefsIoUtil.getString(R.string.preference_key_invalid_services, null))
+            ?: emptyList()
+        set(list) = PrefsIoUtil.setString(R.string.preference_key_invalid_services, JsonUtil.encodeToString(list))
 }

@@ -407,12 +407,6 @@
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
-
-        <service
-            android:name="org.greatfire.envoy.ShadowsocksService"
-            android:stopWithTask="false"
-            android:exported="false"
-            android:isolatedProcess="false" />
             
         <service
             android:name="org.greatfire.envoy.NetworkIntentService"

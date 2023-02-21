@@ -71,9 +71,8 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
     private val validServices = mutableListOf<String>()
     private val invalidServices = mutableListOf<String>()
 
-    // this receiver should be triggered by a success or failure broadcast from either the
-    // NetworkIntentService (indicating whether submitted urls were valid or invalid) or the
-    // ShadowsocksService (indicating whether the service was successfully started or not
+    // this receiver should be triggered by a success or failure broadcast from the
+    // NetworkIntentService (indicating whether submitted urls were valid or invalid)
     private val mBroadcastReceiver: BroadcastReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent != null && context != null) {

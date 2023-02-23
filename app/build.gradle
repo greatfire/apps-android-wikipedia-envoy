@@ -54,9 +54,9 @@ android {
         targetSdkVersion 33
         // current: targetSdkVersion 31
         // TODO: update versionName with each release
-        versionName "3.9"
+        versionName "4.0"
         // TODO: update versionCode with each PR
-        versionCode 100390
+        versionCode 100400
         testApplicationId 'org.greatfire.wikiunblocked.test'
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         testInstrumentationRunnerArguments clearPackageData: 'true'
@@ -181,7 +181,7 @@ android {
         fdroid {
             applicationId 'org.greatfire.wikiunblocked.fdroid'
             // static string for fdroid repo
-            versionName '3.9-fdroid'
+            versionName '4.0-fdroid'
             // TODO: see above re: signing code
             // signingConfig signingConfigs.prod
         }

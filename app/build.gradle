@@ -232,6 +232,13 @@ configurations {
     compileClasspath.extendsFrom(implementation)
 }
 
+// remove ad id dependencies included by firebase
+configurations.all {
+    exclude group: 'com.google.android.gms', module : 'play-services-ads'
+    exclude group: 'com.google.android.gms', module : 'play-services-ads-identifier'
+    exclude group: 'com.google.android.gms', module : 'play-services-ads-lite'
+}
+
 apply from: '../gradle/src/test.gradle'
 apply from: '../gradle/src/checkstyle.gradle'
 apply from: '../gradle/src/ktlint.gradle'

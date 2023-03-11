@@ -149,7 +149,7 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
                         invalidUrls.add(invalidUrl)
                         if (waitingForEnvoy && (invalidUrls.size >= listOfUrls.size)) {
                             Log.e(TAG, "no urls left to try, cannot start envoy/cronet")
-                            // TEMP: clearing this flag will cause any dnstt urls that follow to be ignored
+                            // TEMP: clearing this flag will cause any additional urls that follow to be ignored
                             waitingForEnvoy = false
                         } else {
                             Log.e(TAG, "still trying urls, " + invalidUrls.size + " out of " + listOfUrls.size + " failed")
@@ -160,7 +160,7 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
                     if (extraUrls.isNullOrEmpty()) {
                         Log.e(TAG, "received an envoy continuation broadcast with no urls")
                     } else {
-                        // TODO: failure state above may have triggered, revisit if dnstt becomes necessary
+                        // TODO: failure state above may have triggered, test with additional urls
                         extraUrls.forEach { url ->
                             if (listOfUrls.contains(url)) {
                                 Log.d(TAG, "already validated additional url: " + url)
@@ -241,33 +241,20 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
         // secrets don't support fdroid package name
         val shortPackage = packageName.removeSuffix(".fdroid")
 
-        /* expected format:
-               0. dnstt domain
-               1. dnstt key
-               2. dnstt path
-               3. doh url
-               4. dot address
-               (either 4 or 5 should be an empty string) */
-        val dnsttConfig = mutableListOf<String>()
-        if (Secrets().getdnsttdomain(shortPackage).isNullOrEmpty() ||
-            Secrets().getdnsttkey(shortPackage).isNullOrEmpty() ||
-            Secrets().getdnsttpath(shortPackage).isNullOrEmpty() ||
-            (Secrets().getdohUrl(shortPackage).isNullOrEmpty() && Secrets().getdotAddr(shortPackage).isNullOrEmpty())) {
-            Log.w(TAG, "some dnstt parameters are missing, can't submit dnstt config to envoy")
+        val urlSources = mutableListOf<String>()
+        if (Secrets().geturlSources(shortPackage).isNullOrEmpty()) {
+            Log.w(TAG, "no url sources have been provided")
         } else {
-            dnsttConfig.add(Secrets().getdnsttdomain(shortPackage))
-            dnsttConfig.add(Secrets().getdnsttkey(shortPackage))
-            dnsttConfig.add(Secrets().getdnsttpath(shortPackage))
-            dnsttConfig.add(Secrets().getdohUrl(shortPackage))
-            dnsttConfig.add(Secrets().getdotAddr(shortPackage))
+            Log.d(TAG, "found  url sources: " + Secrets().geturlSources(shortPackage))
+            urlSources.addAll(Secrets().geturlSources(shortPackage).split(","))
         }
 
         if (Secrets().getdefProxy(shortPackage).isNullOrEmpty()) {
-            if (dnsttConfig.isNullOrEmpty()) {
-                Log.w(TAG, "no default proxy urls found and no dnstt config provided, cannot proceed")
+            if (urlSources.isNullOrEmpty()) {
+                Log.w(TAG, "no default proxy urls found and no url sources found, cannot proceed")
                 return
             } else {
-                Log.w(TAG, "no default proxy urls found, submit empty list to check dnstt for urls")
+                Log.w(TAG, "no default proxy urls found, submit empty list to check sources for urls")
             }
         } else {
             Log.d(TAG, "found default proxy urls: " + Secrets().getdefProxy(shortPackage))
@@ -279,7 +266,7 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
             listOfUrls,
             DIRECT_URL,
             Secrets().gethystCert(shortPackage),
-            dnsttConfig
+            urlSources
         )
     }
 

@@ -414,5 +414,11 @@
             android:exported="false"
             android:isolatedProcess="false" />
 
+        <service
+            android:name="org.greatfire.envoy.ShadowsocksService"
+            android:stopWithTask="false"
+            android:exported="false"
+            android:isolatedProcess="false" />
+
     </application>
 </manifest>

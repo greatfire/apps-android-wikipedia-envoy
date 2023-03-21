@@ -61,6 +61,8 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
     private val EVENT_TAG_UPDATE_FAILED = "UPDATE_FAILED"
     private val EVENT_PARAM_UPDATE_FAILED_URL = "update_failed_url"
     private val EVENT_TAG_CONTINUED = "continue_validation"
+    private val EVENT_TAG_VALIDATION_TIME = "VALIDATION_TIME"
+    private val EVENT_PARAM_VALIDATION_SECONDS = "validation_time_seconds"
 
     private lateinit var binding: ActivityMainBinding
 
@@ -242,6 +244,22 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
                         bundle.putString(EVENT_PARAM_UPDATE_FAILED_URL, url)
                     }
                     eventHandler?.logEvent(EVENT_TAG_UPDATE_FAILED, bundle)
+                } else if (intent.action == ENVOY_BROADCAST_VALIDATION_TIME) {
+                    val validationMs = intent.getLongExtra(ENVOY_DATA_VALIDATION_MS, 0L)
+                    if (validationMs <= 0L) {
+                        Log.e(TAG, "received an envoy validation time broadcast with an invalid duration")
+                    } else {
+                        var validationSeconds: Long = validationMs / 1000L
+
+                        // round up small values
+                        if (validationSeconds < 1) {
+                            validationSeconds = 1
+                        }
+
+                        val bundle = Bundle()
+                        bundle.putLong(EVENT_PARAM_VALIDATION_SECONDS, validationSeconds)
+                        eventHandler?.logEvent(EVENT_TAG_VALIDATION_TIME, bundle)
+                    }
                 } else {
                     Log.e(TAG, "received unexpected intent: " + intent.action)
                 }
@@ -375,6 +393,7 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
             addAction(ENVOY_BROADCAST_BATCH_FAILED)
             addAction(ENVOY_BROADCAST_UPDATE_SUCCEEDED)
             addAction(ENVOY_BROADCAST_UPDATE_FAILED)
+            addAction(ENVOY_BROADCAST_VALIDATION_TIME)
         })
     }
 

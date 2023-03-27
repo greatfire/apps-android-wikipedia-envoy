@@ -34,7 +34,7 @@
             android:layout_height="match_parent"
             android:layout_gravity="bottom"
             android:layout_weight="0.8"
-            android:background="@android:color/transparent"
+            android:background="#fcf1ff"
             app:elevation="0dp"
             app:itemIconTint="?attr/nav_tab_item_color_state"
             app:itemTextAppearanceActive="@style/BottomNavigationTextAppearanceActive"
@@ -50,9 +50,11 @@
             android:layout_weight="0.2"
             android:layout_height="match_parent"
             android:contentDescription="@string/nav_item_more"
-            android:background="?attr/selectableItemBackground">
+            android:background="#fcf1ff">
+<!--            android:background="?attr/selectableItemBackground">-->
 
-            <ImageView
+
+        <ImageView
                 android:id="@+id/menu_icon"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"

@@ -10,7 +10,7 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:layout_marginTop="?attr/actionBarSize"
-        android:background="?android:attr/colorBackground"
+        android:background="#ff5555"
         app:layoutPolicy="auto"
         app:tabBackgroundColor="?attr/paper_color"
         app:tabContentBackgroundColor="?attr/paper_color" />
@@ -19,7 +19,7 @@
         android:id="@+id/tab_toolbar"
         android:layout_width="match_parent"
         android:layout_height="?attr/actionBarSize"
-        android:background="?android:attr/colorBackground"
+        android:background="#ff5555"
         android:theme="@style/TabToolbarTheme">
 
         <LinearLayout

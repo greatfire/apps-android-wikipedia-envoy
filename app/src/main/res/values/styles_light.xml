@@ -6,7 +6,8 @@
         <!-- Overrides of base Android color definitions -->
 
         <!-- Default background for all activities -->
-        <item name="android:windowBackground">?attr/paper_color</item>
+<!--        <item name="android:windowBackground">?attr/paper_color</item>-->
+        <item name="android:windowBackground">#fcf1ff</item>
 
         <!-- Background for popup menus, text areas -->
         <item name="android:colorBackground">@color/base90</item>
@@ -17,7 +18,7 @@
         <item name="android:textColorHint">@color/base50</item>
 
         <!-- Toolbar color, list overscroll effect -->
-        <item name="colorPrimary">@color/accent50</item>
+        <item name="colorPrimary">#402bff</item>
 
         <!-- Control color (switch, progress bar, etc), text link color, edit text underline,
              edit text cursor, text selection markers -->

@@ -55,6 +55,12 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
     private val EVENT_TAG_INVALID_BATCH = "INVALID_BATCH"
     private val EVENT_PARAM_INVALID_URLS = "invalid_batch_urls"
     private val EVENT_PARAM_INVALID_SERVICES = "invalid_batch_services"
+    private val EVENT_TAG_UPDATE_SUCCEEDED = "UPDATE_SUCCEEDED"
+    private val EVENT_PARAM_UPDATE_SUCCEEDED_URL = "update_succeeded_url"
+    private val EVENT_PARAM_UPDATE_SUCCEEDED_COUNT = "update_succeeded_count"
+    private val EVENT_TAG_UPDATE_FAILED = "UPDATE_FAILED"
+    private val EVENT_PARAM_UPDATE_FAILED_URL = "update_failed_url"
+    private val EVENT_TAG_CONTINUED = "continue_validation"
     private val EVENT_TAG_VALIDATION_TIME = "VALIDATION_TIME"
     private val EVENT_PARAM_VALIDATION_SECONDS = "validation_time_seconds"
 
@@ -151,27 +157,16 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
                         invalidUrls.add(invalidUrl)
                         if (waitingForEnvoy && (invalidUrls.size >= listOfUrls.size)) {
                             Log.e(TAG, "no urls left to try, cannot start envoy/cronet")
-                            // TEMP: clearing this flag will cause any dnstt urls that follow to be ignored
+                            // clearing this flag will cause any additional urls that follow to be ignored
                             waitingForEnvoy = false
                         } else {
                             Log.e(TAG, "still trying urls, " + invalidUrls.size + " out of " + listOfUrls.size + " failed")
                         }
                     }
                 } else if (intent.action == ENVOY_BROADCAST_VALIDATION_CONTINUED) {
-                    val extraUrls = intent.getStringArrayListExtra(ENVOY_DATA_URLS_CONTINUED)
-                    if (extraUrls.isNullOrEmpty()) {
-                        Log.e(TAG, "received an envoy continuation broadcast with no urls")
-                    } else {
-                        // TODO: failure state above may have triggered, revisit if dnstt becomes necessary
-                        extraUrls.forEach { url ->
-                            if (listOfUrls.contains(url)) {
-                                Log.d(TAG, "already validated additional url: " + url)
-                            } else {
-                                Log.d(TAG, "got additional url for validation: " + url)
-                                listOfUrls.add(url)
-                            }
-                        }
-                    }
+                    Log.d(TAG, "received an envoy continuation broadcast")
+                    val bundle = Bundle()
+                    eventHandler?.logEvent(EVENT_TAG_CONTINUED, bundle)
                 } else if (intent.action == ENVOY_BROADCAST_BATCH_SUCCEEDED) {
                     val urlBatch = intent.getStringArrayListExtra(ENVOY_DATA_BATCH_LIST)
                     val serviceBatch = intent.getStringArrayListExtra(ENVOY_DATA_SERVICE_LIST)
@@ -214,6 +209,41 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
                         )
                         eventHandler?.logEvent(EVENT_TAG_INVALID_BATCH, bundle)
                     }
+                } else if (intent.action == ENVOY_BROADCAST_UPDATE_SUCCEEDED) {
+                    val bundle = Bundle()
+                    val url = intent.getStringExtra(ENVOY_DATA_UPDATE_URL)
+                    if (url.isNullOrEmpty()) {
+                        Log.e(TAG, "received an envoy update succeeded broadcast with no url")
+                    } else {
+                        Log.d(TAG, "envoy update succeeded for url: " + url)
+                        bundle.putString(EVENT_PARAM_UPDATE_SUCCEEDED_URL, url)
+                    }
+                    val extraUrls = intent.getStringArrayListExtra(ENVOY_DATA_UPDATE_LIST)
+                    if (extraUrls.isNullOrEmpty()) {
+                        Log.e(TAG, "received an envoy update succeeded broadcast with no list")
+                    } else {
+                        // additional urls should be received before validation, so checking the count should work correctly
+                        extraUrls.forEach { url ->
+                            if (listOfUrls.contains(url)) {
+                                Log.d(TAG, "already validated additional url: " + url)
+                            } else {
+                                Log.d(TAG, "got additional url for validation: " + url)
+                                listOfUrls.add(url)
+                            }
+                        }
+                        bundle.putInt(EVENT_PARAM_UPDATE_SUCCEEDED_COUNT, extraUrls.size)
+                    }
+                    eventHandler?.logEvent(EVENT_TAG_UPDATE_SUCCEEDED, bundle)
+                } else if (intent.action == ENVOY_BROADCAST_UPDATE_FAILED) {
+                    val bundle = Bundle()
+                    val url = intent.getStringExtra(ENVOY_DATA_UPDATE_URL)
+                    if (url.isNullOrEmpty()) {
+                        Log.e(TAG, "received an envoy update failed broadcast with no url")
+                    } else {
+                        Log.d(TAG, "envoy update failed for url: " + url)
+                        bundle.putString(EVENT_PARAM_UPDATE_FAILED_URL, url)
+                    }
+                    eventHandler?.logEvent(EVENT_TAG_UPDATE_FAILED, bundle)
                 } else if (intent.action == ENVOY_BROADCAST_VALIDATION_TIME) {
                     val validationMs = intent.getLongExtra(ENVOY_DATA_VALIDATION_MS, 0L)
                     if (validationMs <= 0L) {
@@ -259,33 +289,44 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
         // secrets don't support fdroid package name
         val shortPackage = packageName.removeSuffix(".fdroid")
 
-        /* expected format:
-               0. dnstt domain
-               1. dnstt key
-               2. dnstt path
-               3. doh url
-               4. dot address
-               (either 4 or 5 should be an empty string) */
-        val dnsttConfig = mutableListOf<String>()
-        if (Secrets().getdnsttdomain(shortPackage).isNullOrEmpty() ||
-            Secrets().getdnsttkey(shortPackage).isNullOrEmpty() ||
-            Secrets().getdnsttpath(shortPackage).isNullOrEmpty() ||
-            (Secrets().getdohUrl(shortPackage).isNullOrEmpty() && Secrets().getdotAddr(shortPackage).isNullOrEmpty())) {
-            Log.w(TAG, "some dnstt parameters are missing, can't submit dnstt config to envoy")
+        val urlSources = mutableListOf<String>()
+        if (Secrets().geturlSources(shortPackage).isNullOrEmpty()) {
+            Log.w(TAG, "no url sources have been provided")
         } else {
-            dnsttConfig.add(Secrets().getdnsttdomain(shortPackage))
-            dnsttConfig.add(Secrets().getdnsttkey(shortPackage))
-            dnsttConfig.add(Secrets().getdnsttpath(shortPackage))
-            dnsttConfig.add(Secrets().getdohUrl(shortPackage))
-            dnsttConfig.add(Secrets().getdotAddr(shortPackage))
+            Log.d(TAG, "found url sources: " + Secrets().geturlSources(shortPackage))
+            urlSources.addAll(Secrets().geturlSources(shortPackage).split(","))
+        }
+
+        var urlInterval = 1
+        if (Secrets().geturlInterval(shortPackage).isNullOrEmpty()) {
+            Log.w(TAG, "no url interval has been provided")
+        } else {
+            Log.d(TAG, "found url interval: " + Secrets().geturlInterval(shortPackage))
+            urlInterval = Secrets().geturlInterval(shortPackage).toInt()
+        }
+
+        var urlStart = 1
+        if (Secrets().geturlStart(shortPackage).isNullOrEmpty()) {
+            Log.w(TAG, "no url starting index has been provided")
+        } else {
+            Log.d(TAG, "found url starting index: " + Secrets().geturlStart(shortPackage))
+            urlStart = Secrets().geturlStart(shortPackage).toInt()
+        }
+
+        var urlEnd = 1
+        if (Secrets().geturlEnd(shortPackage).isNullOrEmpty()) {
+            Log.w(TAG, "no url ending index has been provided")
+        } else {
+            Log.d(TAG, "found url ending index: " + Secrets().geturlEnd(shortPackage))
+            urlEnd = Secrets().geturlEnd(shortPackage).toInt()
         }
 
         if (Secrets().getdefProxy(shortPackage).isNullOrEmpty()) {
-            if (dnsttConfig.isNullOrEmpty()) {
-                Log.w(TAG, "no default proxy urls found and no dnstt config provided, cannot proceed")
+            if (urlSources.isNullOrEmpty()) {
+                Log.w(TAG, "no default proxy urls found and no url sources found, cannot proceed")
                 return
             } else {
-                Log.w(TAG, "no default proxy urls found, submit empty list to check dnstt for urls")
+                Log.w(TAG, "no default proxy urls found, submit empty list to check sources for urls")
             }
         } else {
             Log.d(TAG, "found default proxy urls: " + Secrets().getdefProxy(shortPackage))
@@ -297,7 +338,10 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
             listOfUrls,
             DIRECT_URL,
             Secrets().gethystCert(shortPackage),
-            dnsttConfig
+            urlSources,
+            urlInterval,
+            urlStart,
+            urlEnd
         )
     }
 
@@ -347,6 +391,8 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
             addAction(ENVOY_BROADCAST_VALIDATION_FAILED)
             addAction(ENVOY_BROADCAST_BATCH_SUCCEEDED)
             addAction(ENVOY_BROADCAST_BATCH_FAILED)
+            addAction(ENVOY_BROADCAST_UPDATE_SUCCEEDED)
+            addAction(ENVOY_BROADCAST_UPDATE_FAILED)
             addAction(ENVOY_BROADCAST_VALIDATION_TIME)
         })
     }

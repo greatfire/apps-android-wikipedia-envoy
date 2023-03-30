@@ -11,17 +11,15 @@ class Secrets {
         }
     }
 
-    external fun getdotAddr(packageName: String): String
+    external fun geturlStart(packageName: String): String
 
-    external fun getdohUrl(packageName: String): String
+    external fun geturlEnd(packageName: String): String
+
+    external fun geturlSources(packageName: String): String
+
+    external fun geturlInterval(packageName: String): String
 
     external fun gethystCert(packageName: String): String
-
-    external fun getdnsttdomain(packageName: String): String
-
-    external fun getdnsttpath(packageName: String): String
-
-    external fun getdnsttkey(packageName: String): String
 
     external fun getdefProxy(packageName: String): String
 }

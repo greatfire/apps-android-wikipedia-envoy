@@ -54,9 +54,9 @@ android {
         targetSdkVersion 33
         // current: targetSdkVersion 31
         // TODO: update versionName with each release
-        versionName "4.01"
+        versionName "4.02"
         // TODO: update versionCode with each PR
-        versionCode 100401
+        versionCode 100402
         testApplicationId 'org.greatfire.wikiunblocked.test'
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         testInstrumentationRunnerArguments clearPackageData: 'true'
@@ -358,7 +358,7 @@ dependencies {
     // implementation files('libs/IEnvoyProxy.aar')
     // use maven dependencies to support automation
     implementation 'org.greatfire.envoy:cronet:102.0.5005.195-4'
-    implementation 'org.greatfire:envoy:102.0.5005.195.2'
+    implementation 'org.greatfire:envoy:102.0.5005.195.4'
     implementation 'org.greatfire:IEnvoyProxy:1.3.1'
 }
 

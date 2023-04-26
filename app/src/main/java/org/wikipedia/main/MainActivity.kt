@@ -63,15 +63,13 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
     private val EVENT_TAG_CONTINUED = "continue_validation"
     private val EVENT_TAG_VALIDATION_TIME = "VALIDATION_TIME"
     private val EVENT_PARAM_VALIDATION_SECONDS = "validation_time_seconds"
+    private val EVENT_TAG_VALIDATION_ENDED = "VALIDATION_ENDED"
+    private val EVENT_PARAM_VALIDATION_ENDED_CAUSE = "validation_ended_cause"
 
     private lateinit var binding: ActivityMainBinding
 
     private var controlNavTabInFragment = false
     private val onboardingLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { }
-
-    // add all string values to this list value
-    private val listOfUrls = mutableListOf<String>()
-    private val invalidUrls = mutableListOf<String>()
 
     private var waitingForEnvoy = false
     private var envoyUnused = false
@@ -88,6 +86,7 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
                     val validUrl = intent.getStringExtra(ENVOY_DATA_URL_SUCCEEDED)
                     val validService = intent.getStringExtra(ENVOY_DATA_SERVICE_SUCCEEDED)
 
+                    // populate debug menu
                     if (BuildConfig.BUILD_TYPE == "debug" && !validService.isNullOrEmpty()) {
                         validServices.add(validService + " - " + validUrl)
                         Prefs.validServices = validServices
@@ -96,8 +95,26 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
                     if (validUrl.isNullOrEmpty()) {
                         Log.e(TAG, "received a valid url that was empty or null")
                     } else if (waitingForEnvoy) {
+                        // select the first valid url that is received (assumed to have the lowest latency)
                         waitingForEnvoy = false
-                        // select the first url that is returned (assumed to have the lowest latency)
+
+                        // record the validation time of the first valid url received
+                        val validationMs = intent.getLongExtra(ENVOY_DATA_VALIDATION_MS, 0L)
+                        if (validationMs <= 0L) {
+                            Log.e(TAG, "received an envoy validation succeeded broadcast with an invalid duration")
+                        } else {
+                            var validationSeconds: Long = validationMs / 1000L
+
+                            // round up small values
+                            if (validationSeconds < 1) {
+                                validationSeconds = 1
+                            }
+
+                            val bundle = Bundle()
+                            bundle.putLong(EVENT_PARAM_VALIDATION_SECONDS, validationSeconds)
+                            eventHandler?.logEvent(EVENT_TAG_VALIDATION_TIME, bundle)
+                        }
+
                         if (DIRECT_URL.contains(validUrl)) {
 
                             val bundle = Bundle()
@@ -139,6 +156,7 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
                     val invalidUrl = intent.getStringExtra(ENVOY_DATA_URL_FAILED)
                     val invalidService = intent.getStringExtra(ENVOY_DATA_SERVICE_FAILED)
 
+                    // populate debug menu
                     if (BuildConfig.BUILD_TYPE == "debug" && !invalidService.isNullOrEmpty()) {
                         invalidServices.add(invalidService + " - " + invalidUrl)
                         Prefs.invalidServices = invalidServices
@@ -154,26 +172,14 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
                         eventHandler?.logEvent(EVENT_TAG_INVALID, bundle)
 
                         Log.d(TAG, "got invalid url: " + invalidUrl)
-                        invalidUrls.add(invalidUrl)
-                        if (waitingForEnvoy && (invalidUrls.size >= listOfUrls.size)) {
-                            Log.e(TAG, "no urls left to try, cannot start envoy/cronet")
-                            // clearing this flag will cause any additional urls that follow to be ignored
-                            waitingForEnvoy = false
-                        } else {
-                            Log.e(TAG, "still trying urls, " + invalidUrls.size + " out of " + listOfUrls.size + " failed")
-                        }
                     }
-                } else if (intent.action == ENVOY_BROADCAST_VALIDATION_CONTINUED) {
-                    Log.d(TAG, "received an envoy continuation broadcast")
-                    val bundle = Bundle()
-                    eventHandler?.logEvent(EVENT_TAG_CONTINUED, bundle)
                 } else if (intent.action == ENVOY_BROADCAST_BATCH_SUCCEEDED) {
-                    val urlBatch = intent.getStringArrayListExtra(ENVOY_DATA_BATCH_LIST)
+                    val urlBatch = intent.getStringArrayListExtra(ENVOY_DATA_URL_LIST)
                     val serviceBatch = intent.getStringArrayListExtra(ENVOY_DATA_SERVICE_LIST)
                     if (urlBatch.isNullOrEmpty() || serviceBatch.isNullOrEmpty()) {
                         Log.e(TAG, "received an envoy batch succeeded broadcast with no urls/services")
                     } else {
-                        // TEMP - fix in next envoy release (direct urls should not be included in batch)
+                        // may be redundant, direct urls should not be included in batch
                         urlBatch.removeAll(DIRECT_URL)
 
                         val bundle = Bundle()
@@ -189,12 +195,12 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
                         eventHandler?.logEvent(EVENT_TAG_VALID_BATCH, bundle)
                     }
                 } else if (intent.action == ENVOY_BROADCAST_BATCH_FAILED) {
-                    val urlBatch = intent.getStringArrayListExtra(ENVOY_DATA_BATCH_LIST)
+                    val urlBatch = intent.getStringArrayListExtra(ENVOY_DATA_URL_LIST)
                     val serviceBatch = intent.getStringArrayListExtra(ENVOY_DATA_SERVICE_LIST)
                     if (urlBatch.isNullOrEmpty() || serviceBatch.isNullOrEmpty()) {
                         Log.e(TAG, "received an envoy batch failed broadcast with no urls/services")
                     } else {
-                        // TEMP - fix in next envoy release (direct urls should not be included in batch)
+                        // may be redundant, direct urls should not be included in batch
                         urlBatch.removeAll(DIRECT_URL)
 
                         val bundle = Bundle()
@@ -222,15 +228,6 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
                     if (extraUrls.isNullOrEmpty()) {
                         Log.e(TAG, "received an envoy update succeeded broadcast with no list")
                     } else {
-                        // additional urls should be received before validation, so checking the count should work correctly
-                        extraUrls.forEach { url ->
-                            if (listOfUrls.contains(url)) {
-                                Log.d(TAG, "already validated additional url: " + url)
-                            } else {
-                                Log.d(TAG, "got additional url for validation: " + url)
-                                listOfUrls.add(url)
-                            }
-                        }
                         bundle.putInt(EVENT_PARAM_UPDATE_SUCCEEDED_COUNT, extraUrls.size)
                     }
                     eventHandler?.logEvent(EVENT_TAG_UPDATE_SUCCEEDED, bundle)
@@ -244,10 +241,16 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
                         bundle.putString(EVENT_PARAM_UPDATE_FAILED_URL, url)
                     }
                     eventHandler?.logEvent(EVENT_TAG_UPDATE_FAILED, bundle)
-                } else if (intent.action == ENVOY_BROADCAST_VALIDATION_TIME) {
+                } else if (intent.action == ENVOY_BROADCAST_VALIDATION_CONTINUED) {
+                    Log.d(TAG, "received an envoy continuation broadcast")
+                    val bundle = Bundle()
+                    eventHandler?.logEvent(EVENT_TAG_CONTINUED, bundle)
+                } else if (intent.action == ENVOY_BROADCAST_VALIDATION_ENDED) {
+                    Log.e(TAG, "received an envoy validation ended broadcast")
+
                     val validationMs = intent.getLongExtra(ENVOY_DATA_VALIDATION_MS, 0L)
                     if (validationMs <= 0L) {
-                        Log.e(TAG, "received an envoy validation time broadcast with an invalid duration")
+                        Log.e(TAG, "received an envoy validation ended broadcast with an invalid duration")
                     } else {
                         var validationSeconds: Long = validationMs / 1000L
 
@@ -260,6 +263,17 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
                         bundle.putLong(EVENT_PARAM_VALIDATION_SECONDS, validationSeconds)
                         eventHandler?.logEvent(EVENT_TAG_VALIDATION_TIME, bundle)
                     }
+
+                    val cause = intent.getStringExtra(ENVOY_DATA_VALIDATION_ENDED_CAUSE)
+                    if (cause.isNullOrEmpty()) {
+                        Log.e(TAG, "received an envoy validation ended broadcast with an invalid cause")
+                    } else {
+                        val bundle = Bundle()
+                        bundle.putString(EVENT_PARAM_VALIDATION_ENDED_CAUSE, cause)
+                        eventHandler?.logEvent(EVENT_TAG_VALIDATION_ENDED, bundle)
+                    }
+
+                    waitingForEnvoy = false
                 } else {
                     Log.e(TAG, "received unexpected intent: " + intent.action)
                 }
@@ -276,8 +290,7 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
 
     fun envoyInit() {
 
-        listOfUrls.clear()
-        invalidUrls.clear()
+        val listOfUrls = mutableListOf<String>()
 
         if (BuildConfig.BUILD_TYPE == "debug") {
             validServices.clear()
@@ -293,7 +306,7 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
         if (Secrets().geturlSources(shortPackage).isNullOrEmpty()) {
             Log.w(TAG, "no url sources have been provided")
         } else {
-            Log.d(TAG, "found url sources: " + Secrets().geturlSources(shortPackage))
+            Log.d(TAG, "found url sources")
             urlSources.addAll(Secrets().geturlSources(shortPackage).split(","))
         }
 
@@ -301,7 +314,7 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
         if (Secrets().geturlInterval(shortPackage).isNullOrEmpty()) {
             Log.w(TAG, "no url interval has been provided")
         } else {
-            Log.d(TAG, "found url interval: " + Secrets().geturlInterval(shortPackage))
+            Log.d(TAG, "found url interval")
             urlInterval = Secrets().geturlInterval(shortPackage).toInt()
         }
 
@@ -309,7 +322,7 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
         if (Secrets().geturlStart(shortPackage).isNullOrEmpty()) {
             Log.w(TAG, "no url starting index has been provided")
         } else {
-            Log.d(TAG, "found url starting index: " + Secrets().geturlStart(shortPackage))
+            Log.d(TAG, "found url starting index")
             urlStart = Secrets().geturlStart(shortPackage).toInt()
         }
 
@@ -317,7 +330,7 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
         if (Secrets().geturlEnd(shortPackage).isNullOrEmpty()) {
             Log.w(TAG, "no url ending index has been provided")
         } else {
-            Log.d(TAG, "found url ending index: " + Secrets().geturlEnd(shortPackage))
+            Log.d(TAG, "found url ending index")
             urlEnd = Secrets().geturlEnd(shortPackage).toInt()
         }
 
@@ -329,7 +342,7 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
                 Log.w(TAG, "no default proxy urls found, submit empty list to check sources for urls")
             }
         } else {
-            Log.d(TAG, "found default proxy urls: " + Secrets().getdefProxy(shortPackage))
+            Log.d(TAG, "found default proxy urls")
             listOfUrls.addAll(Secrets().getdefProxy(shortPackage).split(","))
         }
 
@@ -387,13 +400,13 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
         // register to receive test results
         LocalBroadcastManager.getInstance(this).registerReceiver(mBroadcastReceiver, IntentFilter().apply {
             addAction(ENVOY_BROADCAST_VALIDATION_SUCCEEDED)
-            addAction(ENVOY_BROADCAST_VALIDATION_CONTINUED)
             addAction(ENVOY_BROADCAST_VALIDATION_FAILED)
             addAction(ENVOY_BROADCAST_BATCH_SUCCEEDED)
             addAction(ENVOY_BROADCAST_BATCH_FAILED)
             addAction(ENVOY_BROADCAST_UPDATE_SUCCEEDED)
             addAction(ENVOY_BROADCAST_UPDATE_FAILED)
-            addAction(ENVOY_BROADCAST_VALIDATION_TIME)
+            addAction(ENVOY_BROADCAST_VALIDATION_CONTINUED)
+            addAction(ENVOY_BROADCAST_VALIDATION_ENDED)
         })
     }
 

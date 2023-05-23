@@ -33,7 +33,7 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
 
     private val TAG = "MainActivity"
 
-    private val DIRECT_URL = arrayListOf<String>("https://www.wikipedia.org/")
+    private val DIRECT_URL = arrayListOf<String>() // ("https://www.wikipedia.org/")
 
     // event logging
     private var eventHandler: EventHandler? = null

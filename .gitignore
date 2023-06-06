@@ -1,3 +1,9 @@
+# secrets
+credentials.properties
+
+# local libs
+app/libs
+
 # Generated temporary files
 *.class
 target

@@ -28,18 +28,16 @@ import org.wikipedia.settings.Prefs
 import org.wikipedia.util.DimenUtil
 import org.wikipedia.util.FeedbackUtil
 import org.wikipedia.util.ResourceUtil
+import org.wikipedia.util.UrlUtil
 
 class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callback {
 
     private val TAG = "MainActivity"
 
-    private val DIRECT_URL = arrayListOf<String>() // ("https://www.wikipedia.org/")
+    private val DIRECT_URL = arrayListOf<String>("https://www.wikipedia.org/")
 
     // event logging
     private var eventHandler: EventHandler? = null
-    private val EVENT_TAG_DIRECT = "DIRECT_URL"
-    private val EVENT_PARAM_DIRECT_URL = "direct_url_value"
-    private val EVENT_PARAM_DIRECT_SERVICE = "direct_url_service"
     private val EVENT_TAG_SELECT = "SELECTED_URL"
     private val EVENT_PARAM_SELECT_URL = "selected_url_value"
     private val EVENT_PARAM_SELECT_SERVICE = "selected_url_service"
@@ -60,7 +58,7 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
     private val EVENT_PARAM_UPDATE_SUCCEEDED_COUNT = "update_succeeded_count"
     private val EVENT_TAG_UPDATE_FAILED = "UPDATE_FAILED"
     private val EVENT_PARAM_UPDATE_FAILED_URL = "update_failed_url"
-    private val EVENT_TAG_CONTINUED = "continue_validation"
+    private val EVENT_TAG_CONTINUED = "VALIDATION_CONTINUED"
     private val EVENT_TAG_VALIDATION_TIME = "VALIDATION_TIME"
     private val EVENT_PARAM_VALIDATION_SECONDS = "validation_time_seconds"
     private val EVENT_TAG_VALIDATION_ENDED = "VALIDATION_ENDED"
@@ -83,12 +81,16 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent != null && context != null) {
                 if (intent.action == ENVOY_BROADCAST_VALIDATION_SUCCEEDED) {
-                    val validUrl = intent.getStringExtra(ENVOY_DATA_URL_SUCCEEDED)
-                    val validService = intent.getStringExtra(ENVOY_DATA_SERVICE_SUCCEEDED)
+                    val validUrl = intent.getStringExtra(ENVOY_DATA_URL_SUCCEEDED) ?: ""
+                    var validService = intent.getStringExtra(ENVOY_DATA_SERVICE_SUCCEEDED) ?: ""
+                    if (validUrl.startsWith("envoy") && validService.startsWith("http")) {
+                        validService = "envoy"
+                    }
+                    val sanitizedUrl = UrlUtil.sanitizeUrl(validUrl, validService)
 
                     // populate debug menu
                     if (BuildConfig.BUILD_TYPE == "debug" && !validService.isNullOrEmpty()) {
-                        validServices.add(validService + " - " + validUrl)
+                        validServices.add(validService + " - " + sanitizedUrl)
                         Prefs.validServices = validServices
                     }
 
@@ -115,25 +117,20 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
                             eventHandler?.logEvent(EVENT_TAG_VALIDATION_TIME, bundle)
                         }
 
+                        val bundle = Bundle()
+                        bundle.putString(EVENT_PARAM_SELECT_URL, sanitizedUrl)
+                        bundle.putString(EVENT_PARAM_SELECT_SERVICE, validService)
+                        eventHandler?.logEvent(EVENT_TAG_SELECT, bundle)
+
                         if (DIRECT_URL.contains(validUrl)) {
 
-                            val bundle = Bundle()
-                            bundle.putString(EVENT_PARAM_DIRECT_URL, validUrl)
-                            bundle.putString(EVENT_PARAM_DIRECT_SERVICE, validService)
-                            eventHandler?.logEvent(EVENT_TAG_DIRECT, bundle)
+                            Log.d(TAG, "got direct url: " + sanitizedUrl + ", don't need to start engine")
 
                             // set flag so resuming activity doesn't trigger another envoy check
                             envoyUnused = true
-
-                            Log.d(TAG, "got direct url: " + validUrl + ", don't need to start engine")
                         } else {
 
-                            val bundle = Bundle()
-                            bundle.putString(EVENT_PARAM_SELECT_URL, validUrl)
-                            bundle.putString(EVENT_PARAM_SELECT_SERVICE, validService)
-                            eventHandler?.logEvent(EVENT_TAG_SELECT, bundle)
-
-                            Log.d(TAG, "found a valid url: " + validUrl + ", start engine")
+                            Log.d(TAG, "found a valid url: " + sanitizedUrl + ", start engine")
                             CronetNetworking.initializeCronetEngine(context, validUrl)
 
                             if (fragment is MainFragment) {
@@ -146,19 +143,23 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
                     } else {
 
                         val bundle = Bundle()
-                        bundle.putString(EVENT_PARAM_VALID_URL, validUrl)
+                        bundle.putString(EVENT_PARAM_VALID_URL, sanitizedUrl)
                         bundle.putString(EVENT_PARAM_VALID_SERVICE, validService)
                         eventHandler?.logEvent(EVENT_TAG_VALID, bundle)
 
-                        Log.d(TAG, "already selected a valid url, ignore valid url: " + validUrl)
+                        Log.d(TAG, "already selected a valid url, ignore valid url: " + sanitizedUrl)
                     }
                 } else if (intent.action == ENVOY_BROADCAST_VALIDATION_FAILED) {
-                    val invalidUrl = intent.getStringExtra(ENVOY_DATA_URL_FAILED)
-                    val invalidService = intent.getStringExtra(ENVOY_DATA_SERVICE_FAILED)
+                    val invalidUrl = intent.getStringExtra(ENVOY_DATA_URL_FAILED) ?: ""
+                    var invalidService = intent.getStringExtra(ENVOY_DATA_SERVICE_FAILED) ?: ""
+                    if (invalidUrl.startsWith("envoy") && invalidService.startsWith("http")) {
+                        invalidService = "envoy"
+                    }
+                    val sanitizedUrl = UrlUtil.sanitizeUrl(invalidUrl, invalidService)
 
                     // populate debug menu
                     if (BuildConfig.BUILD_TYPE == "debug" && !invalidService.isNullOrEmpty()) {
-                        invalidServices.add(invalidService + " - " + invalidUrl)
+                        invalidServices.add(invalidService + " - " + sanitizedUrl)
                         Prefs.invalidServices = invalidServices
                     }
 
@@ -167,11 +168,11 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
                     } else {
 
                         val bundle = Bundle()
-                        bundle.putString(EVENT_PARAM_INVALID_URL, invalidUrl)
+                        bundle.putString(EVENT_PARAM_INVALID_URL, sanitizedUrl)
                         bundle.putString(EVENT_PARAM_INVALID_SERVICE, invalidService)
                         eventHandler?.logEvent(EVENT_TAG_INVALID, bundle)
 
-                        Log.d(TAG, "got invalid url: " + invalidUrl)
+                        Log.d(TAG, "got invalid url: " + sanitizedUrl)
                     }
                 } else if (intent.action == ENVOY_BROADCAST_BATCH_SUCCEEDED) {
                     val urlBatch = intent.getStringArrayListExtra(ENVOY_DATA_URL_LIST)
@@ -221,8 +222,9 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
                     if (url.isNullOrEmpty()) {
                         Log.e(TAG, "received an envoy update succeeded broadcast with no url")
                     } else {
-                        Log.d(TAG, "envoy update succeeded for url: " + url)
-                        bundle.putString(EVENT_PARAM_UPDATE_SUCCEEDED_URL, url)
+                        val sanitizedUrl = UrlUtil.sanitizeUrl(url, "update")
+                        Log.d(TAG, "envoy update succeeded for url: " + sanitizedUrl)
+                        bundle.putString(EVENT_PARAM_UPDATE_SUCCEEDED_URL, sanitizedUrl)
                     }
                     val extraUrls = intent.getStringArrayListExtra(ENVOY_DATA_UPDATE_LIST)
                     if (extraUrls.isNullOrEmpty()) {
@@ -237,8 +239,9 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
                     if (url.isNullOrEmpty()) {
                         Log.e(TAG, "received an envoy update failed broadcast with no url")
                     } else {
-                        Log.d(TAG, "envoy update failed for url: " + url)
-                        bundle.putString(EVENT_PARAM_UPDATE_FAILED_URL, url)
+                        val sanitizedUrl = UrlUtil.sanitizeUrl(url, "update")
+                        Log.d(TAG, "envoy update failed for url: " + sanitizedUrl)
+                        bundle.putString(EVENT_PARAM_UPDATE_FAILED_URL, sanitizedUrl)
                     }
                     eventHandler?.logEvent(EVENT_TAG_UPDATE_FAILED, bundle)
                 } else if (intent.action == ENVOY_BROADCAST_VALIDATION_CONTINUED) {

@@ -28,7 +28,6 @@ import org.wikipedia.settings.Prefs
 import org.wikipedia.util.DimenUtil
 import org.wikipedia.util.FeedbackUtil
 import org.wikipedia.util.ResourceUtil
-import org.wikipedia.util.UrlUtil
 
 class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callback {
 
@@ -187,11 +186,11 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
                         // parameter limit is 100 characters, arrays not allowed
                         bundle.putString(
                             EVENT_PARAM_VALID_URLS,
-                            urlBatch.joinToString(separator = ",", transform = { it.take(30) })
+                            UrlUtil.sanitizeUrlList(urlBatch, serviceBatch)
                         )
                         bundle.putString(
                             EVENT_PARAM_VALID_SERVICES,
-                            serviceBatch.joinToString(separator = ",")
+                            UrlUtil.sanitizeServiceList(serviceBatch)
                         )
                         eventHandler?.logEvent(EVENT_TAG_VALID_BATCH, bundle)
                     }
@@ -208,11 +207,11 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
                         // parameter limit is 100 characters, arrays not allowed
                         bundle.putString(
                             EVENT_PARAM_INVALID_URLS,
-                            urlBatch.joinToString(separator = ",", transform = { it.take(30) })
+                            UrlUtil.sanitizeUrlList(urlBatch, serviceBatch)
                         )
                         bundle.putString(
                             EVENT_PARAM_INVALID_SERVICES,
-                            serviceBatch.joinToString(separator = ",")
+                            UrlUtil.sanitizeServiceList(serviceBatch)
                         )
                         eventHandler?.logEvent(EVENT_TAG_INVALID_BATCH, bundle)
                     }

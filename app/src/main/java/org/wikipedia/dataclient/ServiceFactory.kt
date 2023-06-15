@@ -5,7 +5,6 @@ import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFact
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Response
-import org.greatfire.envoy.CronetInterceptor
 import org.wikipedia.WikipediaApp
 import org.wikipedia.analytics.eventplatform.DestinationEventService
 import org.wikipedia.analytics.eventplatform.EventService
@@ -79,9 +78,6 @@ object ServiceFactory {
             .baseUrl(baseUrl)
             .client(OkHttpConnectionFactory.client.newBuilder()
                 .addInterceptor(LanguageVariantHeaderInterceptor(wiki))
-                // this interceptor will be bypassed if no valid proxy urls were found at startup
-                // the app will connect to the internet directly if possible
-                .addInterceptor(CronetInterceptor())
                 .build())
             .addCallAdapterFactory(RxJava3CallAdapterFactory.create())
             .addConverterFactory(JsonUtil.json.asConverterFactory("application/json".toMediaType()))

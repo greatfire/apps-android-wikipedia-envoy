@@ -123,13 +123,13 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
 
                         if (DIRECT_URL.contains(validUrl)) {
 
-                            Log.d(TAG, "got direct url: " + sanitizedUrl + ", don't need to start engine")
+                            Log.d(TAG, "received a direct url: " + sanitizedUrl + ", don't need to start engine")
 
                             // set flag so resuming activity doesn't trigger another envoy check
                             envoyUnused = true
                         } else {
 
-                            Log.d(TAG, "found a valid url: " + sanitizedUrl + ", start engine")
+                            Log.d(TAG, "received a valid url: " + sanitizedUrl + ", start engine")
                             CronetNetworking.initializeCronetEngine(context, validUrl)
 
                             if (fragment is MainFragment) {
@@ -146,7 +146,7 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
                         bundle.putString(EVENT_PARAM_VALID_SERVICE, validService)
                         eventHandler?.logEvent(EVENT_TAG_VALID, bundle)
 
-                        Log.d(TAG, "already selected a valid url, ignore valid url: " + sanitizedUrl)
+                        Log.d(TAG, "already received a valid url, ignore additional valid url: " + sanitizedUrl)
                     }
                 } else if (intent.action == ENVOY_BROADCAST_VALIDATION_FAILED) {
                     val invalidUrl = intent.getStringExtra(ENVOY_DATA_URL_FAILED) ?: ""
@@ -171,7 +171,7 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
                         bundle.putString(EVENT_PARAM_INVALID_SERVICE, invalidService)
                         eventHandler?.logEvent(EVENT_TAG_INVALID, bundle)
 
-                        Log.d(TAG, "got invalid url: " + sanitizedUrl)
+                        Log.d(TAG, "received an invalid url: " + sanitizedUrl)
                     }
                 } else if (intent.action == ENVOY_BROADCAST_BATCH_SUCCEEDED) {
                     val urlBatch = intent.getStringArrayListExtra(ENVOY_DATA_URL_LIST)
@@ -277,7 +277,7 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
 
                     waitingForEnvoy = false
                 } else {
-                    Log.e(TAG, "received unexpected intent: " + intent.action)
+                    Log.e(TAG, "received an unexpected intent: " + intent.action)
                 }
             } else {
                 Log.e(TAG, "receiver triggered but context or intent was null")

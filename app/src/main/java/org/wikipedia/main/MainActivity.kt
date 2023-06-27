@@ -82,8 +82,8 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
                 if (intent.action == ENVOY_BROADCAST_VALIDATION_SUCCEEDED) {
                     val validUrl = intent.getStringExtra(ENVOY_DATA_URL_SUCCEEDED) ?: ""
                     var validService = intent.getStringExtra(ENVOY_DATA_SERVICE_SUCCEEDED) ?: ""
-                    if (validUrl.startsWith("envoy") && validService.startsWith("http")) {
-                        validService = "envoy"
+                    if (validUrl.startsWith(ENVOY_SERVICE_ENVOY) && validService.startsWith(ENVOY_SERVICE_HTTPS)) {
+                        validService = ENVOY_SERVICE_ENVOY
                     }
                     val sanitizedUrl = UrlUtil.sanitizeUrl(validUrl, validService)
 
@@ -151,8 +151,8 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
                 } else if (intent.action == ENVOY_BROADCAST_VALIDATION_FAILED) {
                     val invalidUrl = intent.getStringExtra(ENVOY_DATA_URL_FAILED) ?: ""
                     var invalidService = intent.getStringExtra(ENVOY_DATA_SERVICE_FAILED) ?: ""
-                    if (invalidUrl.startsWith("envoy") && invalidService.startsWith("http")) {
-                        invalidService = "envoy"
+                    if (invalidUrl.startsWith(ENVOY_SERVICE_ENVOY) && invalidService.startsWith(ENVOY_SERVICE_HTTPS)) {
+                        invalidService = ENVOY_SERVICE_ENVOY
                     }
                     val sanitizedUrl = UrlUtil.sanitizeUrl(invalidUrl, invalidService)
 
@@ -221,7 +221,7 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
                     if (url.isNullOrEmpty()) {
                         Log.e(TAG, "received an envoy update succeeded broadcast with no url")
                     } else {
-                        val sanitizedUrl = UrlUtil.sanitizeUrl(url, "update")
+                        val sanitizedUrl = UrlUtil.sanitizeUrl(url, ENVOY_SERVICE_UPDATE)
                         Log.d(TAG, "envoy update succeeded for url: " + sanitizedUrl)
                         bundle.putString(EVENT_PARAM_UPDATE_SUCCEEDED_URL, sanitizedUrl)
                     }
@@ -238,7 +238,7 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
                     if (url.isNullOrEmpty()) {
                         Log.e(TAG, "received an envoy update failed broadcast with no url")
                     } else {
-                        val sanitizedUrl = UrlUtil.sanitizeUrl(url, "update")
+                        val sanitizedUrl = UrlUtil.sanitizeUrl(url, ENVOY_SERVICE_UPDATE)
                         Log.d(TAG, "envoy update failed for url: " + sanitizedUrl)
                         bundle.putString(EVENT_PARAM_UPDATE_FAILED_URL, sanitizedUrl)
                     }

@@ -127,6 +127,7 @@ class MenuNavTabDialog : ExtendedBottomSheetDialogFragment() {
             binding.mainDrawerProxyContainer.visibility = View.GONE
             binding.mainDrawerValidContainer.visibility = View.VISIBLE
             binding.mainDrawerInvalidContainer.visibility = View.VISIBLE
+            binding.mainDrawerUpdateContainer.visibility = View.VISIBLE
             var validString = Prefs.validServices.toString().removePrefix("[").removeSuffix("]").replace(", ", "\n")
             if (!validString.isNullOrEmpty()) {
                 binding.mainDrawerValidText.text = validString
@@ -135,10 +136,15 @@ class MenuNavTabDialog : ExtendedBottomSheetDialogFragment() {
             if (!invalidString.isNullOrEmpty()) {
                 binding.mainDrawerInvalidText.text = invalidString
             }
+            var updateString = Prefs.updateStatus
+            if (!updateString.isNullOrEmpty()) {
+                binding.mainDrawerUpdateText.text = updateString
+            }
         } else {
             binding.mainDrawerProxyContainer.visibility = View.VISIBLE
             binding.mainDrawerValidContainer.visibility = View.GONE
             binding.mainDrawerInvalidContainer.visibility = View.GONE
+            binding.mainDrawerUpdateContainer.visibility = View.GONE
             if (CronetNetworking.cronetEngine() == null) {
                 binding.mainDrawerProxyOn.visibility = View.GONE
                 binding.mainDrawerProxyOff.visibility = View.VISIBLE

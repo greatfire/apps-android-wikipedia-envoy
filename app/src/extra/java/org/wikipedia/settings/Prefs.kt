@@ -686,4 +686,8 @@ object Prefs {
         get() = JsonUtil.decodeFromString<List<String>>(PrefsIoUtil.getString(R.string.preference_key_invalid_services, null))
             ?: emptyList()
         set(list) = PrefsIoUtil.setString(R.string.preference_key_invalid_services, JsonUtil.encodeToString(list))
+
+    var updateStatus
+        get() = PrefsIoUtil.getString(R.string.preference_key_update_status, "...")
+        set(value) = PrefsIoUtil.setString(R.string.preference_key_update_status, value)
 }

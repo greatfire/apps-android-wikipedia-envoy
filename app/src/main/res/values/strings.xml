@@ -1368,4 +1368,13 @@
     <string name="reading_list_share_survey_body">\"Share reading lists\" is a test feature and we need your feedback to improve or remove it.</string>
     <!-- /Shareable reading lists -->
 
+    <string name="retry_dialog_title">Retry</string>
+    <string name="retry_dialog_content">Envoy failed to start, but not all options were tested. Do you want to try again?</string>
+    <string name="retry_dialog_button_retry">OK</string>
+    <string name="retry_dialog_button_close">CANCEL</string>
+    <string name="failure_dialog_title">Blocked</string>
+    <string name="failure_dialog_content">Envoy failed to start and all options have been tested. You should wait a couple hours before trying again.</string>
+    <string name="failure_dialog_button_close">OK</string>
+
+
 </resources>

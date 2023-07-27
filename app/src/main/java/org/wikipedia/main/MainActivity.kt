@@ -244,7 +244,6 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
                     eventHandler?.logEvent(EVENT_TAG_UPDATE_SUCCEEDED, bundle)
                     updateMessages.add(status)
                     Prefs.updateMessages = updateMessages
-
                 } else if (intent.action == ENVOY_BROADCAST_UPDATE_FAILED) {
                     val bundle = Bundle()
                     val url = intent.getStringExtra(ENVOY_DATA_UPDATE_URL)

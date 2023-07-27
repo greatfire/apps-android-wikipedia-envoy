@@ -73,6 +73,7 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
 
     private val validServices = mutableListOf<String>()
     private val invalidServices = mutableListOf<String>()
+    private val updateMessages = mutableListOf<String>()
 
     // this receiver should be triggered by a success or failure broadcast from the
     // NetworkIntentService (indicating whether submitted urls were valid or invalid)
@@ -241,14 +242,17 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
                         status = status + extraUrls.size + " urls"
                     }
                     eventHandler?.logEvent(EVENT_TAG_UPDATE_SUCCEEDED, bundle)
-                    Prefs.updateStatus = status
+                    updateMessages.add(status)
+                    Prefs.updateMessages = updateMessages
+
                 } else if (intent.action == ENVOY_BROADCAST_UPDATE_FAILED) {
                     val bundle = Bundle()
                     val url = intent.getStringExtra(ENVOY_DATA_UPDATE_URL)
 
                     val msg = intent.getStringExtra(ENVOY_DATA_UPDATE_STATUS) ?: "null failed update message"
                     Log.d(TAG, "got failed update status: " + msg)
-                    Prefs.updateStatus = msg
+                    updateMessages.add(msg)
+                    Prefs.updateMessages = updateMessages
 
                     if (url.isNullOrEmpty()) {
                         Log.e(TAG, "received an envoy update failed broadcast with no url")
@@ -314,7 +318,8 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
             Prefs.validServices = validServices
             invalidServices.clear()
             Prefs.invalidServices = invalidServices
-            Prefs.updateStatus = null
+            updateMessages.clear()
+            Prefs.updateMessages = updateMessages
         }
 
         // secrets don't support fdroid package name

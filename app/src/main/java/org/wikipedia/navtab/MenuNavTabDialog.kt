@@ -136,7 +136,7 @@ class MenuNavTabDialog : ExtendedBottomSheetDialogFragment() {
             if (!invalidString.isNullOrEmpty()) {
                 binding.mainDrawerInvalidText.text = invalidString
             }
-            var updateString = Prefs.updateStatus
+            var updateString = Prefs.updateMessages.toString().removePrefix("[").removeSuffix("]").replace(", ", "\n")
             if (!updateString.isNullOrEmpty()) {
                 binding.mainDrawerUpdateText.text = updateString
             }

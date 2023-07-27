@@ -77,7 +77,15 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
         override fun onClick(p0: DialogInterface?, p1: Int) {
             Log.d(TAG, "retry envoy from dialog")
             checkAndInitEnvoy()
-            retryDialog?.dismiss()
+            retryDialog?.cancel()
+            retryDialog = null
+        }
+    }
+    private val cancelListener: DialogInterface.OnClickListener = object : DialogInterface.OnClickListener {
+        override fun onClick(p0: DialogInterface?, p1: Int) {
+            Log.d(TAG, "cancel dialog")
+            retryDialog?.cancel()
+            retryDialog = null
         }
     }
 
@@ -290,21 +298,29 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
                             Log.w(TAG, "envoy failed, but no urls were submitted")
                         } else if (cause.equals(ENVOY_ENDED_FAILED) || cause.equals(ENVOY_ENDED_BLOCKED)) {
                             Log.w(TAG, "envoy failed, all urls failed or were previously blocked")
-                            retryDialog = AlertDialog.Builder(this@MainActivity)
-                                .setTitle(R.string.failure_dialog_title)
-                                .setMessage(R.string.failure_dialog_content)
-                                .setNegativeButton(R.string.failure_dialog_button_close, null)
-                                .create()
-                            retryDialog?.show()
+                            if (retryDialog != null) {
+                                Log.w(TAG, "dialog already awaiting response")
+                            } else {
+                                retryDialog = AlertDialog.Builder(this@MainActivity)
+                                    .setTitle(R.string.failure_dialog_title)
+                                    .setMessage(R.string.failure_dialog_content)
+                                    .setNegativeButton(R.string.failure_dialog_button_close, cancelListener)
+                                    .create()
+                                retryDialog?.show()
+                            }
                         } else if (cause.equals(ENVOY_ENDED_TIMEOUT)) {
                             Log.w(TAG, "envoy failed, but not all urls were tested")
-                            retryDialog = AlertDialog.Builder(this@MainActivity)
-                                .setTitle(R.string.retry_dialog_title)
-                                .setMessage(R.string.retry_dialog_content)
-                                .setPositiveButton(R.string.retry_dialog_button_retry, retryListener)
-                                .setNegativeButton(R.string.retry_dialog_button_close, null)
-                                .create()
-                            retryDialog?.show()
+                            if (retryDialog != null) {
+                                Log.w(TAG, "dialog already awaiting response")
+                            } else {
+                                retryDialog = AlertDialog.Builder(this@MainActivity)
+                                    .setTitle(R.string.retry_dialog_title)
+                                    .setMessage(R.string.retry_dialog_content)
+                                    .setPositiveButton(R.string.retry_dialog_button_retry, retryListener)
+                                    .setNegativeButton(R.string.retry_dialog_button_close, cancelListener)
+                                    .create()
+                                retryDialog?.show()
+                            }
                         } else {
                             // ENVOY_ENDED_UNKNOWN or other cause
                             Log.w(TAG, "envoy failed, cause unclear")

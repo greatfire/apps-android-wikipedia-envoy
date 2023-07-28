@@ -1301,4 +1301,13 @@
   <string name="reading_list_share_message_v2">Message that is sent to a recipient when sharing a reading list.</string>
   <string name="reading_list_share_survey_title">Title for dialog box that leads to a survey about sharing reading lists.</string>
   <string name="reading_list_share_survey_body">Message body for dialog box that leads to a survey about sharing reading lists.</string>
+
+  <string name="retry_dialog_title">Title for dialog box that prompts user to try to connect again with remaining options.</string>
+  <string name="retry_dialog_content">Message body for dialog box that prompts user to try to connect again with remaining options.</string>
+  <string name="retry_dialog_button_retry">Label for button to close dialog and try to connect again.</string>
+  <string name="retry_dialog_button_close">Label for button to close dialog without trying to connect again.</string>
+  <string name="failure_dialog_title">Title for dialog box that informs user that they cannot connect with any available option.</string>
+  <string name="failure_dialog_content">Message body for dialog box that informs user that they cannot connect with any available option.</string>
+  <string name="failure_dialog_button_close">Label for button to close dialog (no action can be taken).</string>
+
 </resources>

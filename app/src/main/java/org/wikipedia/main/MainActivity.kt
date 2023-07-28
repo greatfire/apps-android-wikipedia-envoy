@@ -1,13 +1,11 @@
 package org.wikipedia.main
 
-import android.content.BroadcastReceiver
-import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
+import android.content.*
 import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.view.ActionMode
 import androidx.appcompat.widget.Toolbar
 import androidx.fragment.app.Fragment
@@ -73,6 +71,23 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
 
     private val validServices = mutableListOf<String>()
     private val invalidServices = mutableListOf<String>()
+
+    private var retryDialog: AlertDialog? = null
+    private val retryListener: DialogInterface.OnClickListener = object : DialogInterface.OnClickListener {
+        override fun onClick(p0: DialogInterface?, p1: Int) {
+            Log.d(TAG, "retry envoy from dialog")
+            checkAndInitEnvoy()
+            retryDialog?.cancel()
+            retryDialog = null
+        }
+    }
+    private val cancelListener: DialogInterface.OnClickListener = object : DialogInterface.OnClickListener {
+        override fun onClick(p0: DialogInterface?, p1: Int) {
+            Log.d(TAG, "cancel dialog")
+            retryDialog?.cancel()
+            retryDialog = null
+        }
+    }
 
     // this receiver should be triggered by a success or failure broadcast from the
     // NetworkIntentService (indicating whether submitted urls were valid or invalid)
@@ -250,6 +265,8 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
                 } else if (intent.action == ENVOY_BROADCAST_VALIDATION_ENDED) {
                     Log.e(TAG, "received an envoy validation ended broadcast")
 
+                    waitingForEnvoy = false
+
                     val validationMs = intent.getLongExtra(ENVOY_DATA_VALIDATION_MS, 0L)
                     if (validationMs <= 0L) {
                         Log.e(TAG, "received an envoy validation ended broadcast with an invalid duration")
@@ -273,9 +290,42 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
                         val bundle = Bundle()
                         bundle.putString(EVENT_PARAM_VALIDATION_ENDED_CAUSE, cause)
                         eventHandler?.logEvent(EVENT_TAG_VALIDATION_ENDED, bundle)
-                    }
 
-                    waitingForEnvoy = false
+                        // display dialog to allow user to retry if possible
+                        if (envoyUnused == true) {
+                            Log.w(TAG, "envoy failed, but direct connection worked")
+                        } else if (cause.equals(ENVOY_ENDED_EMPTY)) {
+                            Log.w(TAG, "envoy failed, but no urls were submitted")
+                        } else if (cause.equals(ENVOY_ENDED_FAILED) || cause.equals(ENVOY_ENDED_BLOCKED)) {
+                            Log.w(TAG, "envoy failed, all urls failed or were previously blocked")
+                            if (retryDialog != null) {
+                                Log.w(TAG, "dialog already awaiting response")
+                            } else {
+                                retryDialog = AlertDialog.Builder(this@MainActivity)
+                                    .setTitle(R.string.failure_dialog_title)
+                                    .setMessage(R.string.failure_dialog_content)
+                                    .setNegativeButton(R.string.failure_dialog_button_close, cancelListener)
+                                    .create()
+                                retryDialog?.show()
+                            }
+                        } else if (cause.equals(ENVOY_ENDED_TIMEOUT)) {
+                            Log.w(TAG, "envoy failed, but not all urls were tested")
+                            if (retryDialog != null) {
+                                Log.w(TAG, "dialog already awaiting response")
+                            } else {
+                                retryDialog = AlertDialog.Builder(this@MainActivity)
+                                    .setTitle(R.string.retry_dialog_title)
+                                    .setMessage(R.string.retry_dialog_content)
+                                    .setPositiveButton(R.string.retry_dialog_button_retry, retryListener)
+                                    .setNegativeButton(R.string.retry_dialog_button_close, cancelListener)
+                                    .create()
+                                retryDialog?.show()
+                            }
+                        } else {
+                            // ENVOY_ENDED_UNKNOWN or other cause
+                            Log.w(TAG, "envoy failed, cause unclear")
+                        }
+                    }
                 } else {
                     Log.e(TAG, "received an unexpected intent: " + intent.action)
                 }
@@ -416,6 +466,12 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
         super.onResume()
 
         // start cronet here to prevent exception from starting a service when out of focus
+        checkAndInitEnvoy()
+
+        invalidateOptionsMenu()
+    }
+
+    private fun checkAndInitEnvoy() {
         if (Prefs.isInitialOnboardingEnabled) {
             // TODO: onCreate also checks the following before onboarding, is that necessary here?
             // savedInstanceState == null && !intent.hasExtra(Constants.INTENT_EXTRA_IMPORT_READING_LISTS
@@ -432,8 +488,6 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
             waitingForEnvoy = true
             envoyInit()
         }
-
-        invalidateOptionsMenu()
     }
 
     override fun onStop() {

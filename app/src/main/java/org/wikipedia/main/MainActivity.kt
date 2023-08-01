@@ -71,6 +71,7 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
 
     private val validServices = mutableListOf<String>()
     private val invalidServices = mutableListOf<String>()
+    private val updateMessages = mutableListOf<String>()
 
     private var retryDialog: AlertDialog? = null
     private val retryListener: DialogInterface.OnClickListener = object : DialogInterface.OnClickListener {
@@ -233,23 +234,40 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
                 } else if (intent.action == ENVOY_BROADCAST_UPDATE_SUCCEEDED) {
                     val bundle = Bundle()
                     val url = intent.getStringExtra(ENVOY_DATA_UPDATE_URL)
+
+                    val msg = intent.getStringExtra(ENVOY_DATA_UPDATE_STATUS) ?: "null successful update message"
+                    Log.d(TAG, "got successful update status: " + msg)
+                    var status = ""
+
                     if (url.isNullOrEmpty()) {
                         Log.e(TAG, "received an envoy update succeeded broadcast with no url")
+                        status = status + "got update: "
                     } else {
                         val sanitizedUrl = UrlUtil.sanitizeUrl(url, ENVOY_SERVICE_UPDATE)
                         Log.d(TAG, "envoy update succeeded for url: " + sanitizedUrl)
                         bundle.putString(EVENT_PARAM_UPDATE_SUCCEEDED_URL, sanitizedUrl)
+                        status = status + "got update from " + sanitizedUrl + ": "
                     }
                     val extraUrls = intent.getStringArrayListExtra(ENVOY_DATA_UPDATE_LIST)
                     if (extraUrls.isNullOrEmpty()) {
                         Log.e(TAG, "received an envoy update succeeded broadcast with no list")
+                        status = status + "no urls"
                     } else {
                         bundle.putInt(EVENT_PARAM_UPDATE_SUCCEEDED_COUNT, extraUrls.size)
+                        status = status + extraUrls.size + " urls"
                     }
                     eventHandler?.logEvent(EVENT_TAG_UPDATE_SUCCEEDED, bundle)
+                    updateMessages.add(status)
+                    Prefs.updateMessages = updateMessages
                 } else if (intent.action == ENVOY_BROADCAST_UPDATE_FAILED) {
                     val bundle = Bundle()
                     val url = intent.getStringExtra(ENVOY_DATA_UPDATE_URL)
+
+                    val msg = intent.getStringExtra(ENVOY_DATA_UPDATE_STATUS) ?: "null failed update message"
+                    Log.d(TAG, "got failed update status: " + msg)
+                    updateMessages.add(msg)
+                    Prefs.updateMessages = updateMessages
+
                     if (url.isNullOrEmpty()) {
                         Log.e(TAG, "received an envoy update failed broadcast with no url")
                     } else {
@@ -349,6 +367,8 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
             Prefs.validServices = validServices
             invalidServices.clear()
             Prefs.invalidServices = invalidServices
+            updateMessages.clear()
+            Prefs.updateMessages = updateMessages
         }
 
         // secrets don't support fdroid package name

@@ -2,31 +2,34 @@ package org.wikipedia.views
 
 import android.content.Context
 import android.util.AttributeSet
-import androidx.core.content.withStyledAttributes
+import androidx.core.content.res.use
 import androidx.recyclerview.widget.RecyclerView
+import androidx.recyclerview.widget.StaggeredGridLayoutManager
 import org.wikipedia.R
 import org.wikipedia.util.log.L.logRemoteErrorIfProd
-import androidx.annotation.IntRange as AndroidIntRange
 
 /** [RecyclerView] that invokes a callback when the number of columns should be updated.  */
-open class AutoFitRecyclerView constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0) :
-        RecyclerView(context, attrs, defStyleAttr) {
+open class AutoFitRecyclerView(context: Context, attrs: AttributeSet? = null) :
+        RecyclerView(context, attrs) {
 
     interface Callback {
         fun onColumns(columns: Int)
     }
 
+    private var recyclerLayoutManager: StaggeredGridLayoutManager
     private var minColumnWidth = 0
-    @AndroidIntRange(from = MIN_COLUMNS.toLong())
-    var columns = MIN_COLUMNS
+    private var minColumnCount = 1
+    var columns = 0
     var callback: Callback = DefaultCallback()
 
     init {
-        if (attrs != null) {
-            context.withStyledAttributes(attrs, R.styleable.AutoFitRecyclerView, defStyleAttr) {
-                minColumnWidth = getDimensionPixelSize(R.styleable.AutoFitRecyclerView_minColumnWidth, 0)
-            }
+        context.obtainStyledAttributes(attrs, R.styleable.AutoFitRecyclerView).use {
+            minColumnWidth = it.getDimensionPixelSize(R.styleable.AutoFitRecyclerView_minColumnWidth, 0)
+            minColumnCount = it.getInt(R.styleable.AutoFitRecyclerView_minColumnCount, 1)
         }
+        columns = minColumnCount
+        recyclerLayoutManager = StaggeredGridLayoutManager(columns, StaggeredGridLayoutManager.VERTICAL)
+        layoutManager = recyclerLayoutManager
     }
 
     override fun onMeasure(widthSpec: Int, heightSpec: Int) {
@@ -34,13 +37,14 @@ open class AutoFitRecyclerView constructor(context: Context, attrs: AttributeSet
         val cols = calculateColumns(minColumnWidth, measuredWidth)
         if (columns != cols) {
             columns = cols
+            recyclerLayoutManager.spanCount = columns
             callback.onColumns(columns)
         }
     }
 
     override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
         // https://issuetracker.google.com/issues/37034096
-        // TODO: check again in Sep 2021
+        // TODO: check again in August 2024
         try {
             super.onLayout(changed, l, t, r, b)
         } catch (e: Exception) {
@@ -49,14 +53,10 @@ open class AutoFitRecyclerView constructor(context: Context, attrs: AttributeSet
     }
 
     private fun calculateColumns(columnWidth: Int, availableWidth: Int): Int {
-        return if (columnWidth > 0) MIN_COLUMNS.coerceAtLeast(availableWidth / columnWidth) else MIN_COLUMNS
+        return if (columnWidth > 0) minColumnCount.coerceAtLeast(availableWidth / columnWidth) else minColumnCount
     }
 
     private class DefaultCallback : Callback {
         override fun onColumns(columns: Int) {}
-    }
-
-    companion object {
-        private const val MIN_COLUMNS = 1
     }
 }

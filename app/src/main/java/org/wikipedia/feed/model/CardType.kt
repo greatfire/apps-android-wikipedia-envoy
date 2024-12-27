@@ -1,6 +1,7 @@
 package org.wikipedia.feed.model
 
 import android.content.Context
+import org.wikipedia.extensions.getByCode
 import org.wikipedia.feed.FeedContentType
 import org.wikipedia.feed.accessibility.AccessibilityCardView
 import org.wikipedia.feed.announcement.AnnouncementCardView
@@ -12,6 +13,7 @@ import org.wikipedia.feed.mainpage.MainPageCardView
 import org.wikipedia.feed.news.NewsCardView
 import org.wikipedia.feed.offline.OfflineCardView
 import org.wikipedia.feed.onthisday.OnThisDayCardView
+import org.wikipedia.feed.places.PlacesCardView
 import org.wikipedia.feed.progress.ProgressCardView
 import org.wikipedia.feed.random.RandomCardView
 import org.wikipedia.feed.searchbar.SearchCardView
@@ -19,7 +21,6 @@ import org.wikipedia.feed.suggestededits.SuggestedEditsCardView
 import org.wikipedia.feed.topread.TopReadCardView
 import org.wikipedia.feed.view.FeedCardView
 import org.wikipedia.model.EnumCode
-import org.wikipedia.model.EnumCodeMap
 
 enum class CardType constructor(private val code: Int,
                                 private val contentType: FeedContentType? = null) : EnumCode {
@@ -103,6 +104,11 @@ enum class CardType constructor(private val code: Int,
             return AccessibilityCardView(ctx)
         }
     },
+    PLACES(23, FeedContentType.PLACES) {
+        override fun newView(ctx: Context): FeedCardView<*> {
+            return PlacesCardView(ctx)
+        }
+    },
     // TODO: refactor this item when the new Modern Event Platform is finished.
     ARTICLE_ANNOUNCEMENT(96) {
         override fun newView(ctx: Context): FeedCardView<*> {
@@ -139,10 +145,8 @@ enum class CardType constructor(private val code: Int,
     }
 
     companion object {
-        private val MAP = EnumCodeMap(CardType::class.java)
-
         fun of(code: Int): CardType {
-            return MAP[code]
+            return entries.getByCode(code)
         }
     }
 }

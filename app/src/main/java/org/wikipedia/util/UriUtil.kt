@@ -133,13 +133,10 @@ object UriUtil {
         return removeFragment(removeLinkPrefix(url)).replace("_", " ")
     }
 
-    /** Get language variant code from a Uri, e.g. "zh.*", otherwise returns empty string.  */
+    /** Get language variant code from a Uri path, e.g. "/wiki/Foo" or "/zh-tw/Foo".
+     * It will return "zh-tw" or an empty string */
     fun getLanguageVariantFromUri(uri: Uri): String {
-        if (uri.path.isNullOrEmpty()) {
-            return ""
-        }
-        val parts = uri.path!!.split('/')
-        return if (parts.size > 1 && parts[0] != "wiki") parts[0] else ""
+        return uri.path?.split('/')?.getOrNull(1)?.takeUnless { it == "wiki" || it == "w" }.orEmpty()
     }
 
     /** For internal links only  */
@@ -163,5 +160,9 @@ object UriUtil {
             Constants.WIKI_CODE_WIKIDATA -> { PageTitle(UserAliasData.valueFor("en") + ":" + username, WikiSite(Service.WIKIDATA_URL)) }
             else -> { PageTitle(UserAliasData.valueFor(languageCode) + ":" + username, WikiSite.forLanguageCode(languageCode)) }
         }
+    }
+
+    fun isDiffUrl(url: String): Boolean {
+        return url.contains("/index.php?") && url.contains("diff=") && url.contains("title=")
     }
 }

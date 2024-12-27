@@ -1,8 +1,12 @@
 package org.wikipedia.analytics.eventplatform
 
-import android.util.Log
+import android.widget.Toast
 import androidx.core.os.postDelayed
-import io.reactivex.rxjava3.schedulers.Schedulers
+import kotlinx.coroutines.CoroutineExceptionHandler
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.launch
 import org.wikipedia.BuildConfig
 import org.wikipedia.WikipediaApp
 import org.wikipedia.dataclient.ServiceFactory
@@ -12,13 +16,15 @@ import org.wikipedia.settings.Prefs
 import org.wikipedia.util.ReleaseUtil
 import org.wikipedia.util.log.L
 import java.net.HttpURLConnection
-import java.util.*
+import java.util.Random
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 object EventPlatformClient {
     /**
      * Stream configs to be fetched on startup and stored for the duration of the app lifecycle.
      */
-    private val STREAM_CONFIGS = mutableMapOf<String, StreamConfig>()
+    private val STREAM_CONFIGS = ConcurrentHashMap<String, StreamConfig>()
 
     /*
      * When ENABLED is false, items can be enqueued but not dequeued.
@@ -29,6 +35,8 @@ object EventPlatformClient {
      * Taken out of iOS client, but flag can be set on the request object to wait until connected to send
      */
     private var ENABLED = WikipediaApp.instance.isOnline
+
+    private val coroutineScope = CoroutineScope(Dispatchers.IO)
 
     fun setStreamConfig(streamConfig: StreamConfig) {
         STREAM_CONFIGS[streamConfig.streamName] = streamConfig
@@ -42,7 +50,6 @@ object EventPlatformClient {
      * Set whether the client is enabled. This can react to device online/offline state as well
      * as other considerations.
      */
-    @Synchronized
     fun setEnabled(enabled: Boolean) {
         ENABLED = enabled
         if (ENABLED) {
@@ -59,28 +66,22 @@ object EventPlatformClient {
      *
      * @param event event
      */
-    @Synchronized
     fun submit(event: Event) {
-        // TEMP: disable code for now so events are not logged to wikipedia
-        /*
         if (!SamplingController.isInSample(event)) {
             return
         }
         OutputBuffer.schedule(event)
-        */
     }
 
     fun flushCachedEvents() {
         OutputBuffer.sendAllScheduled()
     }
 
-    private fun refreshStreamConfigs() {
-        ServiceFactory.get(WikiSite(BuildConfig.META_WIKI_BASE_URI)).streamConfigs
-                .subscribeOn(Schedulers.io())
-                .subscribe({ updateStreamConfigs(it.streamConfigs) }) { L.e(it) }
+    suspend fun refreshStreamConfigs() {
+        val response = ServiceFactory.get(WikiSite(BuildConfig.META_WIKI_BASE_URI)).getStreamConfigs()
+        updateStreamConfigs(response.streamConfigs)
     }
 
-    @Synchronized
     private fun updateStreamConfigs(streamConfigs: Map<String, StreamConfig>) {
         STREAM_CONFIGS.clear()
         STREAM_CONFIGS.putAll(streamConfigs)
@@ -90,7 +91,11 @@ object EventPlatformClient {
     fun setUpStreamConfigs() {
         STREAM_CONFIGS.clear()
         STREAM_CONFIGS.putAll(Prefs.streamConfigs)
-        refreshStreamConfigs()
+        MainScope().launch(CoroutineExceptionHandler { _, t ->
+            L.e(t)
+        }) {
+            refreshStreamConfigs()
+        }
     }
 
     /**
@@ -110,15 +115,18 @@ object EventPlatformClient {
          * If another item is added to QUEUE during this time, reset the countdown.
          */
         private const val WAIT_MS = 30000L
-        private const val MAX_QUEUE_SIZE = 128
         private const val TOKEN = "sendScheduled"
+        private val MAX_QUEUE_SIZE get() = Prefs.analyticsQueueSize
 
-        @Synchronized
         fun sendAllScheduled() {
             WikipediaApp.instance.mainThreadHandler.removeCallbacksAndMessages(TOKEN)
             if (ENABLED) {
-                send()
-                QUEUE.clear()
+                val eventsByStream: Map<String, List<Event>>
+                synchronized(QUEUE) {
+                    eventsByStream = QUEUE.groupBy { it.stream }
+                    QUEUE.clear()
+                }
+                send(eventsByStream)
             }
         }
 
@@ -127,10 +135,11 @@ object EventPlatformClient {
          *
          * @param event event data
          */
-        @Synchronized
         fun schedule(event: Event) {
             if (ENABLED || QUEUE.size <= MAX_QUEUE_SIZE) {
-                QUEUE.add(event)
+                synchronized(QUEUE) {
+                    QUEUE.add(event)
+                }
             }
             if (ENABLED) {
                 if (QUEUE.size >= MAX_QUEUE_SIZE) {
@@ -150,50 +159,43 @@ object EventPlatformClient {
          * Also batch the events ordered by their streams, as the QUEUE
          * can contain events of different streams
          */
-        private fun send() {
-            Log.d("ENVOY_LOG", "event logging is currently enabled:" + Prefs.isEventLoggingEnabled + ", send events if necessary")
-            if (!Prefs.isEventLoggingEnabled) {
-                return
-            }
-            QUEUE.groupBy { it.stream }.forEach { (stream, events) ->
-                sendEventsForStream(STREAM_CONFIGS[stream]!!, events)
+        private fun send(eventsByStream: Map<String, List<Event>>) {
+            eventsByStream.forEach { (stream, events) ->
+                getStreamConfig(stream)?.let {
+                    sendEventsForStream(it, events)
+                }
             }
         }
 
-        fun sendEventsForStream(streamConfig: StreamConfig, events: List<Event>) {
-            (if (ReleaseUtil.isDevRelease)
-                ServiceFactory.getAnalyticsRest(streamConfig).postEvents(events)
-            else
-                ServiceFactory.getAnalyticsRest(streamConfig).postEventsHasty(events))
-                    .subscribeOn(Schedulers.io())
-                    .subscribe({
-                        when (it.code()) {
-                            HttpURLConnection.HTTP_CREATED,
-                            HttpURLConnection.HTTP_ACCEPTED -> {}
-                            else -> {
-                                // Received successful response, but unexpected HTTP code.
-                                // TODO: queue up to retry?
+        private fun sendEventsForStream(streamConfig: StreamConfig, events: List<Event>) {
+            coroutineScope.launch(CoroutineExceptionHandler { _, caught ->
+                L.e(caught)
+                if (caught is HttpStatusException) {
+                    if (caught.code >= HttpURLConnection.HTTP_INTERNAL_ERROR) {
+                        // TODO: For errors >= 500, queue up to retry?
+                    } else {
+                        // Something unexpected happened.
+                        if (ReleaseUtil.isDevRelease) {
+                            // If it's a pre-beta release, show a loud toast to signal that
+                            // a potential issue should be investigated.
+                            WikipediaApp.instance.mainThreadHandler.post {
+                                Toast.makeText(WikipediaApp.instance, caught.message, Toast.LENGTH_LONG).show()
                             }
-                        }
-                    }) {
-                        if (it is HttpStatusException) {
-                            when (it.code) {
-                                HttpURLConnection.HTTP_BAD_REQUEST,
-                                HttpURLConnection.HTTP_INTERNAL_ERROR,
-                                HttpURLConnection.HTTP_UNAVAILABLE,
-                                HttpURLConnection.HTTP_GATEWAY_TIMEOUT -> {
-                                    L.e(it)
-                                    // TODO: queue up to retry?
-                                }
-                                else -> {
-                                    // Something unexpected happened. Crash if this is a pre-production build.
-                                    L.logRemoteErrorIfProd(it)
-                                }
-                            }
-                        } else {
-                            L.w(it)
                         }
                     }
+                }
+            }) {
+                val eventService = if (ReleaseUtil.isDevRelease) ServiceFactory.getAnalyticsRest(streamConfig).postEvents(events) else
+                    ServiceFactory.getAnalyticsRest(streamConfig).postEventsHasty(events)
+                when (eventService.code()) {
+                    HttpURLConnection.HTTP_CREATED,
+                    HttpURLConnection.HTTP_ACCEPTED -> {}
+                    else -> {
+                        // Received successful response, but unexpected HTTP code.
+                        // TODO: queue up to retry?
+                    }
+                }
+            }
         }
     }
 
@@ -258,6 +260,10 @@ object EventPlatformClient {
             Prefs.eventPlatformSessionId = null
 
             // A session refresh implies a pageview refresh, so clear runtime value of PAGEVIEW_ID.
+            beginNewPageView()
+        }
+
+        fun beginNewPageView() {
             PAGEVIEW_ID = null
         }
 
@@ -290,7 +296,7 @@ object EventPlatformClient {
             if (SAMPLING_CACHE.containsKey(stream)) {
                 return SAMPLING_CACHE[stream]!!
             }
-            val streamConfig = STREAM_CONFIGS[stream] ?: return false
+            val streamConfig = getStreamConfig(stream) ?: return false
             val samplingConfig = streamConfig.samplingConfig
             if (samplingConfig == null || samplingConfig.rate == 1.0) {
                 return true
@@ -320,7 +326,7 @@ object EventPlatformClient {
                 return AssociationController.pageViewId
             }
             if (unit == SamplingConfig.UNIT_DEVICE) {
-                return Prefs.appInstallId.orEmpty()
+                return WikipediaApp.instance.appInstallID
             }
             L.e("Bad identifier type")
             return UUID.randomUUID().toString()

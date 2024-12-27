@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+<org.wikipedia.views.WikiSwipeRefreshLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/swipe_refresh_layout"
     android:layout_width="match_parent"
     android:layout_height="wrap_content">
@@ -26,7 +27,8 @@
                 android:layout_marginEnd="@dimen/activity_horizontal_margin"
                 android:layout_marginTop="16dp"
                 android:layout_marginBottom="24dp"
-                android:visibility="gone" />
+                android:visibility="gone"
+                tools:visibility="visible"/>
 
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/recycler_view"
@@ -58,18 +60,20 @@
 
                 <TextView
                     android:id="@+id/empty_title"
-                    style="@style/MaterialLargePrimaryTitle"
+                    style="@style/H2"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginBottom="12dp"
-                    android:text="@string/saved_list_empty_title"/>
+                    android:text="@string/saved_list_empty_title"
+                    android:textAlignment="center"/>
 
                 <TextView
                     android:id="@+id/empty_message"
-                    style="@style/MaterialMediumSecondaryCaption"
+                    style="@style/P"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="@string/reading_lists_empty_message" />
+                    android:text="@string/reading_lists_empty_message"
+                    android:textAlignment="center" />
             </LinearLayout>
         </ScrollView>
 
@@ -84,4 +88,4 @@
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 
-</androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+</org.wikipedia.views.WikiSwipeRefreshLayout>

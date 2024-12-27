@@ -3,33 +3,44 @@ package org.wikipedia.edit.summaries
 import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.content.res.ColorStateList
 import android.net.Uri
 import android.os.Bundle
 import android.speech.RecognizerIntent
-import android.util.SparseArray
+import android.text.method.LinkMovementMethod
 import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.annotation.StringRes
+import androidx.core.view.isVisible
 import androidx.core.widget.TextViewCompat
 import androidx.core.widget.addTextChangedListener
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.chip.Chip
 import kotlinx.coroutines.CoroutineExceptionHandler
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import org.wikipedia.Constants
 import org.wikipedia.R
+import org.wikipedia.analytics.eventplatform.ImageRecommendationsEvent
 import org.wikipedia.auth.AccountUtil
 import org.wikipedia.databinding.FragmentPreviewSummaryBinding
 import org.wikipedia.dataclient.ServiceFactory
 import org.wikipedia.edit.EditSectionActivity
+import org.wikipedia.edit.EditSectionViewModel
+import org.wikipedia.edit.insertmedia.InsertMediaActivity
+import org.wikipedia.extensions.parcelableExtra
 import org.wikipedia.page.PageTitle
-import org.wikipedia.util.*
+import org.wikipedia.util.DeviceUtil
+import org.wikipedia.util.DimenUtil
+import org.wikipedia.util.FeedbackUtil
+import org.wikipedia.util.L10nUtil
+import org.wikipedia.util.ResourceUtil
+import org.wikipedia.util.StringUtil
+import org.wikipedia.util.UriUtil
 import org.wikipedia.util.log.L
 import org.wikipedia.views.ViewAnimations
 
@@ -38,7 +49,6 @@ class EditSummaryFragment : Fragment() {
     private val binding get() = _binding!!
 
     private lateinit var editSummaryHandler: EditSummaryHandler
-    private lateinit var localizeSummaryTags: SparseArray<String>
     lateinit var title: PageTitle
 
     val summaryText get() = binding.editSummaryText
@@ -47,7 +57,7 @@ class EditSummaryFragment : Fragment() {
     val watchThisPage get() = binding.watchPageCheckBox.isChecked
     val isActive get() = binding.root.visibility == View.VISIBLE
 
-    private val summaryTagStrings = intArrayOf(R.string.edit_summary_tag_typo, R.string.edit_summary_tag_grammar, R.string.edit_summary_tag_links)
+    private val viewModel: EditSectionViewModel by activityViewModels()
 
     private val voiceSearchLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         val voiceSearchResult = it.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
@@ -80,10 +90,16 @@ class EditSummaryFragment : Fragment() {
         }
 
         binding.editSummaryTextLayout.setEndIconOnClickListener {
+            if (invokeSource() == Constants.InvokeSource.EDIT_ADD_IMAGE) {
+                ImageRecommendationsEvent.logAction("tts_open", "editsummary_dialog", getActionDataStringForData())
+            }
             launchVoiceInput()
         }
 
         binding.learnMoreButton.setOnClickListener {
+            if (invokeSource() == Constants.InvokeSource.EDIT_ADD_IMAGE) {
+                ImageRecommendationsEvent.logAction("view_help", "editsummary_dialog", getActionDataStringForData())
+            }
             UriUtil.visitInExternalBrowser(requireContext(), Uri.parse(getString(R.string.meta_edit_summary_url)))
         }
 
@@ -95,17 +111,32 @@ class EditSummaryFragment : Fragment() {
             UriUtil.visitInExternalBrowser(requireContext(), Uri.parse(getString(R.string.meta_watching_pages_url)))
         }
 
+        binding.watchPageCheckBox.setOnCheckedChangeListener { _, isChecked ->
+            if (invokeSource() == Constants.InvokeSource.EDIT_ADD_IMAGE) {
+                ImageRecommendationsEvent.logAction(if (isChecked) "add_watchlist" else "remove_watchlist", "editsummary_dialog", getActionDataStringForData())
+            }
+        }
+
         getWatchedStatus()
 
-        localizeSummaryTags = L10nUtil.getStringsForArticleLanguage(title, summaryTagStrings)
         addEditSummaries()
 
         return binding.root
     }
 
+    private fun getActionDataStringForData(): String {
+        val addImageTitle = activity?.intent?.parcelableExtra<PageTitle>(InsertMediaActivity.EXTRA_IMAGE_TITLE)
+        val addImageSource = activity?.intent?.getStringExtra(InsertMediaActivity.EXTRA_IMAGE_SOURCE)
+        val addImageSourceProjects = activity?.intent?.getStringExtra(InsertMediaActivity.EXTRA_IMAGE_SOURCE_PROJECTS)
+        return ImageRecommendationsEvent.getActionDataString(filename = addImageTitle?.prefixedText.orEmpty(),
+            recommendationSource = addImageSource, recommendationSourceProjects = addImageSourceProjects,
+            acceptanceState = "accepted", captionAdd = !activity?.intent?.getStringExtra(InsertMediaActivity.RESULT_IMAGE_CAPTION).isNullOrEmpty(),
+            altTextAdd = !activity?.intent?.getStringExtra(InsertMediaActivity.RESULT_IMAGE_ALT).isNullOrEmpty())
+    }
+
     override fun onStart() {
         super.onStart()
-        editSummaryHandler = EditSummaryHandler(binding.root, binding.editSummaryText, title)
+        editSummaryHandler = EditSummaryHandler(lifecycleScope, binding.root, binding.editSummaryText, title)
     }
 
     override fun onDestroyView() {
@@ -127,11 +158,10 @@ class EditSummaryFragment : Fragment() {
             lifecycleScope.launch(CoroutineExceptionHandler { _, throwable ->
                 L.e(throwable)
             }) {
-                withContext(Dispatchers.IO) {
-                    val page = ServiceFactory.get(title.wikiSite)
-                        .getWatchedStatus(title.prefixedText).query?.firstPage()!!
-                    binding.watchPageCheckBox.isChecked = page.watched
-                }
+                val query = ServiceFactory.get(title.wikiSite)
+                    .getWatchedStatusWithUserOptions(title.prefixedText).query!!
+                binding.watchPageCheckBox.isChecked = query.firstPage()!!.watched ||
+                        query.userInfo?.options?.watchDefault == 1
             }
         } else {
             binding.watchPageCheckBox.isEnabled = false
@@ -140,17 +170,25 @@ class EditSummaryFragment : Fragment() {
     }
 
     private fun addEditSummaries() {
+        val summaryTagStrings = if (invokeSource() == Constants.InvokeSource.EDIT_ADD_IMAGE)
+            intArrayOf(R.string.edit_summary_added_image_and_caption, R.string.edit_summary_added_image)
+        else
+            intArrayOf(R.string.edit_summary_tag_typo, R.string.edit_summary_tag_grammar, R.string.edit_summary_tag_links)
+
+        val localizedSummaries = L10nUtil.getStringsForArticleLanguage(title, summaryTagStrings)
         summaryTagStrings.forEach {
-            addChip(it)
+            addChip(localizedSummaries[it])
         }
     }
 
-    private fun addChip(@StringRes editSummaryResource: Int): Chip {
+    private fun addChip(editSummary: String): Chip {
         val chip = Chip(requireContext())
-        val editSummary = getString(editSummaryResource)
         chip.text = editSummary
-        TextViewCompat.setTextAppearance(chip, R.style.CustomChipStyle)
-        chip.setChipBackgroundColorResource(ResourceUtil.getThemedAttributeId(requireContext(), R.attr.chip_background_color))
+        TextViewCompat.setTextAppearance(chip, R.style.Chip_Accessible)
+        chip.setChipBackgroundColorResource(ResourceUtil.getThemedAttributeId(requireContext(), R.attr.background_color))
+        chip.chipStrokeWidth = DimenUtil.dpToPx(1f)
+        chip.chipStrokeColor = ColorStateList.valueOf(ResourceUtil.getThemedColor(requireContext(), R.attr.border_color))
+        chip.shapeAppearanceModel = chip.shapeAppearanceModel.withCornerSize(DimenUtil.dpToPx(8f))
         chip.setCheckedIconResource(R.drawable.ic_chip_check_24px)
         chip.setOnClickListener {
             // Clear the text field and insert the text
@@ -168,7 +206,18 @@ class EditSummaryFragment : Fragment() {
         return chip
     }
 
+    private fun invokeSource() = (requireActivity() as EditSectionActivity).getInvokeSource()
+
     fun show() {
+        if (!AccountUtil.isLoggedIn || AccountUtil.isTemporaryAccount) {
+            binding.footerContainer.tempAccountInfoContainer.isVisible = true
+            binding.footerContainer.tempAccountInfoIcon.setImageResource(if (AccountUtil.isTemporaryAccount) R.drawable.ic_temp_account else R.drawable.ic_anon_account)
+            binding.footerContainer.tempAccountInfoText.movementMethod = LinkMovementMethod.getInstance()
+            binding.footerContainer.tempAccountInfoText.text = StringUtil.fromHtml(if (AccountUtil.isTemporaryAccount) getString(R.string.temp_account_edit_status, AccountUtil.getUserNameFromCookie(), getString(R.string.temp_accounts_help_url))
+            else getString(if (viewModel.tempAccountsEnabled) R.string.temp_account_anon_edit_status else R.string.temp_account_anon_ip_edit_status, getString(R.string.temp_accounts_help_url)))
+        } else {
+            binding.footerContainer.tempAccountInfoContainer.isVisible = false
+        }
         ViewAnimations.fadeIn(binding.root) {
             requireActivity().invalidateOptionsMenu()
             binding.editSummaryText.requestFocus()

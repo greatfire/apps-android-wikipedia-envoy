@@ -8,15 +8,12 @@ import android.view.LayoutInflater
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import androidx.appcompat.content.res.AppCompatResources
-import androidx.core.view.ViewCompat
 import org.wikipedia.R
 import org.wikipedia.databinding.ItemWikipediaLanguageBinding
-import org.wikipedia.search.SearchFragment
 import org.wikipedia.util.DeviceUtil
+import org.wikipedia.util.DimenUtil
 import org.wikipedia.util.ResourceUtil
 import org.wikipedia.util.StringUtil
-import org.wikipedia.views.ViewUtil
-import java.util.*
 
 class WikipediaLanguagesItemView : LinearLayout {
     interface Callback {
@@ -35,10 +32,11 @@ class WikipediaLanguagesItemView : LinearLayout {
     init {
         layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT)
+        minimumHeight = DimenUtil.roundedDpToPx(DimenUtil.getDimension(R.dimen.list_item_default_height))
         setBackgroundColor(ResourceUtil.getThemedColor(context, R.attr.paper_color))
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             foreground = AppCompatResources.getDrawable(context,
-                ResourceUtil.getThemedAttributeId(context, R.attr.selectableItemBackground))
+                ResourceUtil.getThemedAttributeId(context, androidx.appcompat.R.attr.selectableItemBackground))
         }
         binding.wikiLanguageCheckbox.setOnCheckedChangeListener { _, _ ->
             callback?.onCheckedChanged(position)
@@ -52,7 +50,7 @@ class WikipediaLanguagesItemView : LinearLayout {
     }
 
     private fun updateBackgroundColor() {
-        setBackgroundColor(if (binding.wikiLanguageCheckbox.isChecked) ResourceUtil.getThemedColor(context, R.attr.multi_select_background_color)
+        setBackgroundColor(if (binding.wikiLanguageCheckbox.isChecked) ResourceUtil.getThemedColor(context, R.attr.background_color)
         else ResourceUtil.getThemedColor(context, R.attr.paper_color))
     }
 
@@ -60,11 +58,8 @@ class WikipediaLanguagesItemView : LinearLayout {
         this.position = position
         binding.wikiLanguageOrder.text = (position + 1).toString()
         binding.wikiLanguageTitle.text = StringUtil.capitalize(languageLocalizedName.orEmpty())
-        binding.wikiLanguageCode.text = langCode
-        val color = ResourceUtil.getThemedColorStateList(context, R.attr.color_group_63)
-        binding.wikiLanguageCode.setTextColor(color)
-        ViewCompat.setBackgroundTintList(binding.wikiLanguageCode, color)
-        ViewUtil.formatLangButton(binding.wikiLanguageCode, langCode, SearchFragment.LANG_BUTTON_TEXT_SIZE_SMALLER, SearchFragment.LANG_BUTTON_TEXT_SIZE_LARGER)
+        binding.wikiLanguageTitle.forceLayout()
+        binding.wikiLanguageCode.setLangCode(langCode)
     }
 
     fun setCheckBoxEnabled(enabled: Boolean) {

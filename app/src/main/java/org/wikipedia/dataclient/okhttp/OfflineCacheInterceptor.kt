@@ -78,7 +78,7 @@ class OfflineCacheInterceptor : Interceptor {
                     val name = line.substring(0, pos).trim()
                     val value = line.substring(pos + 1).trim()
                     builder.header(name, value)
-                    if (name.lowercase(Locale.getDefault()) == "content-type") {
+                    if (name.equals("content-type", true)) {
                         contentType = value
                     }
                 }
@@ -230,7 +230,6 @@ class OfflineCacheInterceptor : Interceptor {
         const val SAVE_HEADER_SAVE = "save"
         const val OFFLINE_PATH = "offline_files"
 
-        @JvmStatic
         fun shouldSave(request: Request): Boolean {
             return "GET" == request.method && SAVE_HEADER_SAVE == request.header(SAVE_HEADER)
         }

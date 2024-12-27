@@ -15,9 +15,9 @@ import org.wikipedia.util.ResourceUtil.getThemedColor
 class SearchActionProvider(context: Context,
                            private val searchHintString: String,
                            private val callback: Callback) : ActionProvider(context) {
-    interface Callback {
+    fun interface Callback {
         fun onQueryTextChange(s: String)
-        fun onQueryTextFocusChange()
+        fun onQueryTextFocusChange() {}
     }
 
     private val binding = GroupSearchBinding.inflate(LayoutInflater.from(context))
@@ -29,7 +29,7 @@ class SearchActionProvider(context: Context,
         binding.searchInput.inputType = EditorInfo.TYPE_CLASS_TEXT
         binding.searchInput.isSubmitButtonEnabled = false
         binding.searchInput.queryHint = searchHintString
-        binding.searchInput.setSearchHintTextColor(getThemedColor(context, R.attr.color_group_63))
+        binding.searchInput.setSearchHintTextColor(getThemedColor(context, R.attr.secondary_color))
         binding.searchInput.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
             override fun onQueryTextSubmit(s: String): Boolean {
                 return false

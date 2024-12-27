@@ -1,47 +1,50 @@
 package org.wikipedia.navtab
 
+import androidx.annotation.DrawableRes
+import androidx.annotation.StringRes
 import androidx.fragment.app.Fragment
 import org.wikipedia.R
 import org.wikipedia.feed.FeedFragment
 import org.wikipedia.history.HistoryFragment
 import org.wikipedia.model.EnumCode
-import org.wikipedia.model.EnumCodeMap
 import org.wikipedia.readinglist.ReadingListsFragment
 import org.wikipedia.suggestededits.SuggestedEditsTasksFragment
+import org.wikipedia.usercontrib.ContributionsDashboardHelper
 
-enum class NavTab constructor(private val text: Int, private val id: Int, private val icon: Int) : EnumCode {
-    EXPLORE(R.string.feed, R.id.nav_tab_explore, R.drawable.ic_globe) {
+enum class NavTab constructor(
+    @StringRes val text: Int,
+    val id: Int,
+    @DrawableRes val icon: Int,
+    ) : EnumCode {
+
+    EXPLORE(R.string.feed, R.id.nav_tab_explore, R.drawable.selector_nav_explore) {
         override fun newInstance(): Fragment {
             return FeedFragment.newInstance()
         }
     },
-    READING_LISTS(R.string.nav_item_saved, R.id.nav_tab_reading_lists, R.drawable.ic_bookmark_white_24dp) {
+    READING_LISTS(R.string.nav_item_saved, R.id.nav_tab_reading_lists, R.drawable.selector_nav_saved) {
         override fun newInstance(): Fragment {
             return ReadingListsFragment.newInstance()
         }
     },
-    SEARCH(R.string.nav_item_search, R.id.nav_tab_search, R.drawable.ic_search_themed_24dp) {
+    SEARCH(R.string.nav_item_search, R.id.nav_tab_search, R.drawable.selector_nav_search) {
         override fun newInstance(): Fragment {
             return HistoryFragment.newInstance()
         }
     },
-    EDITS(R.string.nav_item_suggested_edits, R.id.nav_tab_edits, R.drawable.ic_mode_edit_themed_24dp) {
+    EDITS(
+        if (ContributionsDashboardHelper.contributionsDashboardEnabled) R.string.nav_item_contribute
+        else R.string.nav_item_suggested_edits, R.id.nav_tab_edits, R.drawable.selector_nav_edits
+    ) {
         override fun newInstance(): Fragment {
             return SuggestedEditsTasksFragment.newInstance()
         }
+    },
+    MORE(R.string.nav_item_more, R.id.nav_tab_more, R.drawable.ic_menu_white_24dp) {
+        override fun newInstance(): Fragment {
+            return Fragment()
+        }
     };
-
-    fun text(): Int {
-        return text
-    }
-
-    fun icon(): Int {
-        return icon
-    }
-
-    fun id(): Int {
-        return id
-    }
 
     abstract fun newInstance(): Fragment
 
@@ -52,15 +55,8 @@ enum class NavTab constructor(private val text: Int, private val id: Int, privat
     }
 
     companion object {
-
-        private val MAP = EnumCodeMap(NavTab::class.java)
-
         fun of(code: Int): NavTab {
-            return MAP[code]
-        }
-
-        fun size(): Int {
-            return MAP.size()
+            return entries[code]
         }
     }
 }

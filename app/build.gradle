@@ -1,41 +1,27 @@
-import com.android.tools.profgen.ArtProfileKt
-import com.android.tools.profgen.ArtProfileSerializer
-import com.android.tools.profgen.DexFile
-
 plugins {
     id 'com.android.application'
+    id 'com.google.devtools.ksp'
     id 'com.google.gms.google-services'
     id 'kotlin-android'
     id 'kotlin-parcelize'
     id 'kotlinx-serialization'
-    id 'kotlin-kapt'
     id 'com.klaxit.hiddensecrets'
 }
 
-// TODO - signing code conflicted with both android studio and github actions and has been
-//   commented out. investigate a method to unify signing process across all environments.
-// final File PROD_PROPS_FILE = new File(System.getProperty('user.home'), '.sign/signing.properties')
-// final File REPO_PROPS_FILE = new File('repo.properties')
-// final Properties PROD_PROPS = loadProperties(PROD_PROPS_FILE)
-// final Properties REPO_PROPS = loadProperties(REPO_PROPS_FILE)
+// Copy the signing.properties.sample file to ~/.sign/signing.properties and adjust the values.
+final File PROD_PROPS_FILE = new File(System.getProperty('user.home'), '.sign/signing.properties')
+final File REPO_PROPS_FILE = new File('repo.properties')
+final Properties PROD_PROPS = loadProperties(PROD_PROPS_FILE)
+final Properties REPO_PROPS = loadProperties(REPO_PROPS_FILE)
 
-def computeVersionName(label) {
-    return "${android.defaultConfig.versionName}-${label}"
+static def computeVersionName(versionCode, label) {
+    return "2.7.${versionCode}-${label}-${(new Date()).format('yyyy-MM-dd')}"
 }
 
-final JavaVersion JAVA_VERSION = JavaVersion.VERSION_1_8
+final JavaVersion JAVA_VERSION = JavaVersion.VERSION_17
 
 android {
-
-    // Enable NDK build
-    externalNativeBuild {
-        cmake {
-            path "src/main/cpp/CMakeLists.txt"
-        }
-    }
-
-    compileSdkVersion 33
-    // current: compileSdkVersion 32
+    compileSdk 35
 
     compileOptions {
         coreLibraryDesugaringEnabled true
@@ -49,44 +35,26 @@ android {
     }
 
     defaultConfig {
-        applicationId 'org.greatfire.wikiunblocked'
-        minSdkVersion 21
-        targetSdkVersion 33
-        // current: targetSdkVersion 31
-        // TODO: update versionName with each release
-        versionName "4.04"
-        // TODO: update versionCode with each PR
-        versionCode 100404
-        testApplicationId 'org.greatfire.wikiunblocked.test'
+        applicationId 'org.wikipedia'
+        minSdk 21
+        targetSdk 35
+        versionCode 50515
+        testApplicationId 'org.wikipedia.test'
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         testInstrumentationRunnerArguments clearPackageData: 'true'
 
         vectorDrawables.useSupportLibrary = true
 
-        kapt {
-            arguments {
-                arg("room.schemaLocation", "$projectDir/schemas".toString())
-            }
-        }
-
-        dimension 'default'
-
-        // TODO: see above re: signing code
-        // signingConfig signingConfigs.debug
+        signingConfig signingConfigs.debug
 
         buildConfigField "String", "DEFAULT_RESTBASE_URI_FORMAT", '"%1$s://%2$s/api/rest_v1/"'
         buildConfigField "String", "META_WIKI_BASE_URI", '"https://meta.wikimedia.org"'
         buildConfigField "String", "EVENTGATE_ANALYTICS_EXTERNAL_BASE_URI", '"https://intake-analytics.wikimedia.org"'
         buildConfigField "String", "EVENTGATE_LOGGING_EXTERNAL_BASE_URI", '"https://intake-logging.wikimedia.org"'
-
-        ndk {
-            abiFilters = []
-            abiFilters.addAll(ABI_FILTERS.split(';').collect{it as String})
-        }
-
-        packagingOptions {
-            doNotStrip '**/libcronet*.so'
-        }
+        def TEST_LOGIN_USERNAME = System.getenv('TEST_LOGIN_USERNAME')
+        def TEST_LOGIN_PASSWORD = System.getenv('TEST_LOGIN_PASSWORD')
+        buildConfigField "String", "TEST_LOGIN_USERNAME", TEST_LOGIN_USERNAME != null ? "\"${TEST_LOGIN_USERNAME}\"" : '"Foo"'
+        buildConfigField "String", "TEST_LOGIN_PASSWORD", TEST_LOGIN_PASSWORD != null ? "\"${TEST_LOGIN_PASSWORD}\"" : '"Bar"'
     }
 
     testOptions {
@@ -95,19 +63,18 @@ android {
 
     buildFeatures {
         viewBinding true
+        buildConfig true
+    }
+
+    androidResources {
+        generateLocaleConfig = true
     }
 
     sourceSets {
 
-        dev { java.srcDirs += 'src/extra/java' }
-        prod { java.srcDirs += 'src/extra/java' }
-        alpha { java.srcDirs += 'src/extra/java' }
-        beta { java.srcDirs += 'src/extra/java' }
-        greatfire { java.srcDirs += 'src/extra/java' }
-        custom { java.srcDirs += 'src/extra/java' }
-
-        test {
-            java.srcDirs += 'src/testlib/java'
+        [ prod, beta, alpha, dev, custom ].forEach {
+            it.java.srcDirs += 'src/extra/java'
+            it.res.srcDirs += 'src/extra/res'
         }
 
         androidTest {
@@ -115,19 +82,14 @@ android {
         }
     }
 
-    /* TODO: see above re: signing code
     signingConfigs {
         prod {
             setSigningConfigKey(prod, PROD_PROPS)
-        }
-        release {
-            setSigningConfigKey(release, PROD_PROPS)
         }
         debug {
             setSigningConfigKey(debug, REPO_PROPS)
         }
     }
-    */
 
     buildTypes {
         debug {
@@ -137,60 +99,43 @@ android {
         }
         release {
             minifyEnabled true
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'release-proguard-rules.pro'
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
             testProguardFiles 'test-proguard-rules.pro'
         }
     }
 
-    flavorDimensions 'default'
+    flavorDimensions = ['default']
 
     productFlavors {
         dev {
-            versionName computeVersionName('dev')
+            versionName computeVersionName(defaultConfig.versionCode, 'dev')
             applicationIdSuffix '.dev'
             buildConfigField "String", "META_WIKI_BASE_URI", '"https://meta.wikimedia.beta.wmflabs.org"'
             buildConfigField "String", "EVENTGATE_ANALYTICS_EXTERNAL_BASE_URI", '"https://intake-analytics.wikimedia.beta.wmflabs.org"'
             buildConfigField "String", "EVENTGATE_LOGGING_EXTERNAL_BASE_URI", '"https://intake-logging.wikimedia.beta.wmflabs.org"'
-
-            def TEST_LOGIN_USERNAME = System.getenv('TEST_LOGIN_USERNAME')
-            def TEST_LOGIN_PASSWORD = System.getenv('TEST_LOGIN_PASSWORD')
-            buildConfigField "String", "TEST_LOGIN_USERNAME", TEST_LOGIN_USERNAME != null ? "\"${TEST_LOGIN_USERNAME}\"" : '"Foo"'
-            buildConfigField "String", "TEST_LOGIN_PASSWORD", TEST_LOGIN_PASSWORD != null ? "\"${TEST_LOGIN_PASSWORD}\"" : '"Bar"'
         }
         prod {
-            versionName computeVersionName('r')
-            // TODO: see above re: signing code
-            // signingConfig signingConfigs.prod
+            versionName computeVersionName(defaultConfig.versionCode, 'r')
+            signingConfig signingConfigs.prod
         }
         alpha {
-            versionName computeVersionName('alpha')
+            versionName computeVersionName(defaultConfig.versionCode, 'alpha')
             applicationIdSuffix '.alpha'
         }
         beta {
-            versionName computeVersionName('beta')
+            versionName computeVersionName(defaultConfig.versionCode, 'beta')
             applicationIdSuffix '.beta'
-            // TODO: see above re: signing code
-            // signingConfig signingConfigs.prod
-        }
-        greatfire {
-            applicationId 'org.greatfire.wikiunblocked'
-            versionName computeVersionName('greatfire')
-            // TODO: see above re: signing code
-            // signingConfig signingConfigs.prod
+            signingConfig signingConfigs.prod
         }
         fdroid {
-            applicationId 'org.greatfire.wikiunblocked.fdroid'
-            // static string for fdroid repo
-            versionName '4.04-fdroid'
-            // TODO: see above re: signing code
-            // signingConfig signingConfigs.prod
+            versionName computeVersionName(defaultConfig.versionCode, 'fdroid')
+            signingConfig signingConfigs.prod
         }
         custom {
-            versionName computeVersionName(customChannel)
+            versionName computeVersionName(defaultConfig.versionCode, customChannel)
             // next line is for injecting a custom channel value into the custom/AndroidManifest.xml
             manifestPlaceholders = [customChannel:getProperty('customChannel').toString()]
-            // TODO: see above re: signing code
-            // signingConfig signingConfigs.prod
+            signingConfig signingConfigs.prod
         }
     }
 
@@ -206,26 +151,11 @@ android {
             enableSplit false
         }
     }
-
     namespace 'org.wikipedia'
 }
 
-ext.abiCodes = ['armeabi-v7a':1, 'arm64-v8a':2, 'x86':3, 'x86_64':4 ]
-
-import com.android.build.OutputFile
-
-android.applicationVariants.all { variant ->
-    variant.outputs.each { output ->
-        def defaultCode = variant.versionCode
-        // this only matches to a number for a single filter value
-        def filter = ABI_FILTERS
-        def abiMultiplier = project.ext.abiCodes.get(filter)
-        if (abiMultiplier == null) {
-            abiMultiplier = 0
-        }
-        // ie: 100370 -> 1003701
-        output.versionCodeOverride = defaultCode * 10 + abiMultiplier
-    }
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
 }
 
 configurations {
@@ -242,115 +172,98 @@ dependencies {
     // use http://gradleplease.appspot.com/ or http://search.maven.org/.
     // Debug with ./gradlew -q app:dependencies --configuration compile
 
-    String okHttpVersion = '4.10.0'
-    String retrofitVersion = '2.9.0'
-    String glideVersion = '4.13.2'
-    String mockitoVersion = '3.4.0'
-    String leakCanaryVersion = '2.8.1'
-    String kotlinCoroutinesVersion = '1.3.9'
-    String firebaseMessagingVersion = '23.1.0'
-    String firebaseLoggingVersion = '31.0.0'
-    String mlKitVersion = '17.0.4'
-    String roomVersion = "2.4.3"
-    String espressoVersion = '3.5.0'
-    String serialization_version = '1.4.0'
+    coreLibraryDesugaring libs.desugar.jdk.libs
 
-    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:1.2.2'
+    implementation libs.kotlin.stdlib.jdk8
+    implementation libs.kotlinx.coroutines.core
+    implementation libs.kotlinx.coroutines.android
+    implementation libs.kotlinx.serialization.json
 
-    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:$kotlin_version"
-    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-core:$kotlinCoroutinesVersion"
-    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:$kotlinCoroutinesVersion"
-    implementation "org.jetbrains.kotlinx:kotlinx-serialization-json:$serialization_version"
+    implementation libs.material
+    implementation libs.appcompat
+    implementation libs.core.ktx
+    implementation libs.browser
+    implementation libs.constraintlayout
+    implementation libs.fragment.ktx
+    implementation libs.paging.runtime.ktx
+    implementation libs.palette.ktx
+    implementation libs.preference.ktx
+    implementation libs.recyclerview
+    implementation libs.viewpager2
+    implementation libs.flexbox
+    implementation libs.drawerlayout
+    implementation libs.swiperefreshlayout
+    implementation libs.work.runtime.ktx
+    implementation libs.metrics.platform
 
-    implementation "com.google.android.material:material:1.7.0"
-    implementation 'androidx.appcompat:appcompat:1.5.1'
-    implementation "androidx.core:core-ktx:1.9.0"
-    implementation "androidx.browser:browser:1.4.0"
-    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
-    implementation "androidx.fragment:fragment-ktx:1.5.4"
-    implementation "androidx.paging:paging-runtime-ktx:3.1.1"
-    implementation "androidx.palette:palette-ktx:1.0.0"
-    implementation "androidx.preference:preference-ktx:1.2.0"
-    implementation "androidx.recyclerview:recyclerview:1.2.1"
-    implementation "androidx.viewpager2:viewpager2:1.0.0"
-    implementation 'com.google.android.flexbox:flexbox:3.0.0'
-    implementation 'com.android.installreferrer:installreferrer:2.2'
-    implementation 'androidx.drawerlayout:drawerlayout:1.1.1'
-    implementation 'androidx.work:work-runtime-ktx:2.7.1'
+    implementation libs.glide
+    implementation libs.okhttp3.integration
+    ksp libs.glide.ksp
 
-    implementation ('com.github.michael-rapp:chrome-like-tab-switcher:0.4.6') {
-        exclude group: 'org.jetbrains'
-    }
+    implementation libs.okhttp.tls
+    implementation libs.okhttp3.logging.interceptor
+    implementation libs.retrofit
+    implementation libs.commons.lang3
+    implementation libs.jsoup
+    implementation libs.photoview
+    implementation libs.balloon
+    implementation libs.retrofit2.kotlinx.serialization.converter
 
-    implementation "com.github.bumptech.glide:glide:$glideVersion"
-    implementation "com.github.bumptech.glide:okhttp3-integration:$glideVersion"
-    kapt "com.github.bumptech.glide:compiler:$glideVersion"
+    implementation libs.android.sdk
+    implementation libs.android.plugin.annotation.v9
 
-    implementation "com.squareup.okhttp3:logging-interceptor:$okHttpVersion"
-    implementation "com.squareup.retrofit2:retrofit:$retrofitVersion"
-    implementation "com.squareup.retrofit2:adapter-rxjava3:$retrofitVersion"
-    implementation "io.reactivex.rxjava3:rxjava:3.1.5"
-    implementation "io.reactivex.rxjava3:rxandroid:3.0.0"
-    implementation 'org.apache.commons:commons-lang3:3.9'
-    implementation 'org.jsoup:jsoup:1.13.1'
-    implementation 'com.github.chrisbanes:PhotoView:2.3.0'
-    implementation "com.github.skydoves:balloon:1.3.4"
-    implementation "com.jakewharton.retrofit:retrofit2-kotlinx-serialization-converter:0.8.0"
-
-    implementation("androidx.room:room-runtime:$roomVersion")
-    annotationProcessor "androidx.room:room-compiler:$roomVersion"
-    kapt "androidx.room:room-compiler:$roomVersion"
-    implementation("androidx.room:room-ktx:$roomVersion")
-    implementation "androidx.room:room-rxjava3:$roomVersion"
+    implementation libs.androidx.room.runtime
+    annotationProcessor libs.androidx.room.compiler
+    ksp libs.androidx.room.compiler
+    implementation libs.androidx.room.ktx
 
     // For language detection during editing
-    devImplementation "com.google.mlkit:language-id:$mlKitVersion"
-    prodImplementation "com.google.mlkit:language-id:$mlKitVersion"
-    alphaImplementation "com.google.mlkit:language-id:$mlKitVersion"
-    betaImplementation "com.google.mlkit:language-id:$mlKitVersion"
-    greatfireImplementation "com.google.mlkit:language-id:$mlKitVersion"
-    customImplementation "com.google.mlkit:language-id:$mlKitVersion"
+    prodImplementation libs.com.google.mlkit.language.id
+    betaImplementation libs.com.google.mlkit.language.id
+    alphaImplementation libs.com.google.mlkit.language.id
+    devImplementation libs.com.google.mlkit.language.id
+    customImplementation libs.com.google.mlkit.language.id
 
-    // For event logging and receiving push notifications for logged-in users.
-    devImplementation "com.google.firebase:firebase-messaging-ktx:$firebaseMessagingVersion"
-    devImplementation platform("com.google.firebase:firebase-bom:$firebaseLoggingVersion")
-    devImplementation "com.google.firebase:firebase-analytics-ktx"
-    prodImplementation "com.google.firebase:firebase-messaging-ktx:$firebaseMessagingVersion"
-    prodImplementation platform("com.google.firebase:firebase-bom:$firebaseLoggingVersion")
-    prodImplementation "com.google.firebase:firebase-analytics-ktx"
-    alphaImplementation "com.google.firebase:firebase-messaging-ktx:$firebaseMessagingVersion"
-    alphaImplementation platform("com.google.firebase:firebase-bom:$firebaseLoggingVersion")
-    alphaImplementation "com.google.firebase:firebase-analytics-ktx"
-    betaImplementation "com.google.firebase:firebase-messaging-ktx:$firebaseMessagingVersion"
-    betaImplementation platform("com.google.firebase:firebase-bom:$firebaseLoggingVersion")
-    betaImplementation "com.google.firebase:firebase-analytics-ktx"
-    greatfireImplementation "com.google.firebase:firebase-messaging-ktx:$firebaseMessagingVersion"
-    greatfireImplementation platform("com.google.firebase:firebase-bom:$firebaseLoggingVersion")
-    greatfireImplementation "com.google.firebase:firebase-analytics-ktx"
-    customImplementation "com.google.firebase:firebase-messaging-ktx:$firebaseMessagingVersion"
-    customImplementation platform("com.google.firebase:firebase-bom:$firebaseLoggingVersion")
-    customImplementation "com.google.firebase:firebase-analytics-ktx"
+    // For receiving push notifications for logged-in users.
+    prodImplementation libs.com.google.firebase.firebase.messaging.ktx3
+    betaImplementation libs.com.google.firebase.firebase.messaging.ktx3
+    alphaImplementation libs.com.google.firebase.firebase.messaging.ktx3
+    devImplementation libs.com.google.firebase.firebase.messaging.ktx3
+    customImplementation libs.com.google.firebase.firebase.messaging.ktx3
 
-    debugImplementation "com.squareup.leakcanary:leakcanary-android:$leakCanaryVersion"
-    implementation "com.squareup.leakcanary:plumber-android:$leakCanaryVersion"
+    // For integrating with Google Pay for donations
+    prodImplementation libs.com.google.android.gms.play.services.wallet2
+    betaImplementation libs.com.google.android.gms.play.services.wallet2
+    alphaImplementation libs.com.google.android.gms.play.services.wallet2
+    devImplementation libs.com.google.android.gms.play.services.wallet2
+    customImplementation libs.com.google.android.gms.play.services.wallet2
 
-    testImplementation 'junit:junit:4.13.2'
-    testImplementation "org.mockito:mockito-inline:$mockitoVersion"
-    testImplementation 'org.robolectric:robolectric:4.5.1'
-    testImplementation "com.squareup.okhttp3:okhttp:$okHttpVersion"
-    testImplementation "com.squareup.okhttp3:mockwebserver:$okHttpVersion"
-    testImplementation "commons-io:commons-io:2.6"
-    testImplementation 'org.hamcrest:hamcrest:2.2'
-    testImplementation "androidx.room:room-testing:$roomVersion"
+    // For InstallReferrer Library
+    prodImplementation libs.installreferrer
+    betaImplementation libs.installreferrer
+    alphaImplementation libs.installreferrer
+    devImplementation libs.installreferrer
+    customImplementation libs.installreferrer
 
-    androidTestImplementation "androidx.test.espresso:espresso-core:$espressoVersion"
-    androidTestImplementation "androidx.test.espresso:espresso-contrib:$espressoVersion"
-    androidTestImplementation "androidx.test.espresso:espresso-intents:$espressoVersion"
-    androidTestImplementation "androidx.test.espresso:espresso-web:$espressoVersion"
-    androidTestImplementation 'androidx.test.ext:junit:1.1.4'
-    androidTestImplementation 'androidx.test.uiautomator:uiautomator:2.2.0'
-    androidTestImplementation "android.arch.persistence.room:testing:1.1.1"
-    androidTestUtil 'androidx.test:orchestrator:1.4.2'
+    debugImplementation libs.leakcanary.android
+    implementation libs.plumber.android
+
+    testImplementation libs.junit
+    testImplementation libs.mockito.inline
+    testImplementation libs.robolectric
+    testImplementation libs.okhttp3.okhttp
+    testImplementation libs.mockwebserver
+    testImplementation libs.hamcrest
+    testImplementation libs.room.testing
+
+    androidTestImplementation libs.espresso.core
+    androidTestImplementation libs.espresso.contrib
+    androidTestImplementation libs.androidx.espresso.intents
+    androidTestImplementation libs.espresso.web
+    androidTestImplementation libs.androidx.junit
+    androidTestImplementation libs.androidx.uiautomator
+    androidTestImplementation libs.room.testing
+    androidTestUtil libs.androidx.orchestrator
 
     // switch to local files if needed to support development
     // implementation files('libs/cronet-debug.aar')
@@ -362,32 +275,6 @@ dependencies {
     implementation 'org.greatfire:IEnvoyProxy:1.5.0'
 }
 
-project.afterEvaluate {
-    tasks.each { task ->
-        if (task.name.startsWith("compile") && task.name.endsWith("ReleaseArtProfile")) {
-            task.doLast {
-                outputs.files.each { file ->
-                    if (file.name.endsWith(".profm")) {
-                        println("Sorting ${file} ...")
-                        def version = ArtProfileSerializer.valueOf("METADATA_0_0_2")
-                        def profile = ArtProfileKt.ArtProfile(file)
-                        def keys = new ArrayList(profile.profileData.keySet())
-                        def sortedData = new LinkedHashMap()
-                        Collections.sort keys, new DexFile.Companion()
-                        keys.each { key -> sortedData[key] = profile.profileData[key] }
-                        new FileOutputStream(file).with {
-                            write(version.magicBytes$profgen)
-                            write(version.versionBytes$profgen)
-                            version.write$profgen(it, sortedData, "")
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-/* TODO: see above re: signing code
 private setSigningConfigKey(config, Properties props) {
     if(props != null) {
         config.storeFile = props['keystore'] == null ? null : file(props['keystore'])
@@ -408,4 +295,3 @@ private static Properties loadProperties(File file) {
     }
     return props
 }
-*/

@@ -1,13 +1,13 @@
 package org.wikipedia.page.edithistory
 
-import android.os.Bundle
 import androidx.lifecycle.MutableLiveData
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.paging.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.map
+import org.wikipedia.Constants
 import org.wikipedia.dataclient.ServiceFactory
 import org.wikipedia.dataclient.WikiSite
 import org.wikipedia.dataclient.mwapi.MwQueryPage
@@ -20,13 +20,12 @@ import org.wikipedia.util.Resource
 import org.wikipedia.util.log.L
 import retrofit2.HttpException
 import java.io.IOException
-import java.util.*
+import java.util.Calendar
 
-class EditHistoryListViewModel(bundle: Bundle) : ViewModel() {
-
+class EditHistoryListViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
     val editHistoryStatsData = MutableLiveData<Resource<EditHistoryStats>>()
 
-    var pageTitle: PageTitle = bundle.getParcelable(EditHistoryListActivity.INTENT_EXTRA_PAGE_TITLE)!!
+    val pageTitle = savedStateHandle.get<PageTitle>(Constants.ARG_TITLE)!!
     var pageId = -1
         private set
     var comparing = false
@@ -38,13 +37,11 @@ class EditHistoryListViewModel(bundle: Bundle) : ViewModel() {
     var currentQuery = ""
     var actionModeActive = false
 
-    var editHistorySource: EditHistoryPagingSource? = null
     private val cachedRevisions = mutableListOf<MwQueryPage.Revision>()
     private var cachedContinueKey: String? = null
 
     val editHistoryFlow = Pager(PagingConfig(pageSize = 50), pagingSourceFactory = {
-        editHistorySource = EditHistoryPagingSource(pageTitle)
-        editHistorySource!!
+        EditHistoryPagingSource(pageTitle)
     }).flow.map { pagingData ->
         val anonEditsOnly = Prefs.editHistoryFilterType == EditCount.EDIT_TYPE_ANONYMOUS
         val userEditsOnly = Prefs.editHistoryFilterType == EditCount.EDIT_TYPE_EDITORS
@@ -54,23 +51,23 @@ class EditHistoryListViewModel(bundle: Bundle) : ViewModel() {
             null
         }.filter {
             when {
-                anonEditsOnly -> { it.isAnon }
-                userEditsOnly -> { !it.isAnon }
+                anonEditsOnly -> { it.isAnon || it.isTemp }
+                userEditsOnly -> { !it.isAnon && !it.isTemp }
                 else -> { true }
             }
         }.filter {
             if (currentQuery.isNotEmpty()) {
                 it.comment.contains(currentQuery, true) ||
-                        it.content.contains(currentQuery, true) ||
+                        it.contentMain.contains(currentQuery, true) ||
                         it.user.contains(currentQuery, true)
             } else true
         }.map {
             EditHistoryItem(it)
         }.insertSeparators { before, after ->
-            val dateBefore = if (before != null) DateUtil.getShortDateString(DateUtil.iso8601DateParse(before.item.timeStamp)) else ""
-            val dateAfter = if (after != null) DateUtil.getShortDateString(DateUtil.iso8601DateParse(after.item.timeStamp)) else ""
-            if (dateAfter.isNotEmpty() && dateAfter != dateBefore) {
-                EditHistorySeparator(dateAfter)
+            val dateBefore = before?.item?.localDateTime?.toLocalDate()
+            val dateAfter = after?.item?.localDateTime?.toLocalDate()
+            if (dateAfter != null && dateAfter != dateBefore) {
+                EditHistorySeparator(DateUtil.getShortDateString(dateAfter))
             } else {
                 null
             }
@@ -85,32 +82,29 @@ class EditHistoryListViewModel(bundle: Bundle) : ViewModel() {
         viewModelScope.launch(CoroutineExceptionHandler { _, throwable ->
             L.e(throwable)
         }) {
-            withContext(Dispatchers.IO) {
+            val calendar = Calendar.getInstance()
+            val today = DateUtil.getYMDDateString(calendar.time)
+            calendar.add(Calendar.YEAR, -1)
+            val lastYear = DateUtil.getYMDDateString(calendar.time)
 
-                val calendar = Calendar.getInstance()
-                val today = DateUtil.getYMDDateString(calendar.time)
-                calendar.add(Calendar.YEAR, -1)
-                val lastYear = DateUtil.getYMDDateString(calendar.time)
+            val mwResponse = async { ServiceFactory.get(pageTitle.wikiSite).getRevisionDetailsAscending(pageTitle.prefixedText, null, 1, null) }
+            val editCountsResponse = async { ServiceFactory.getCoreRest(pageTitle.wikiSite).getEditCount(pageTitle.prefixedText, EditCount.EDIT_TYPE_EDITS) }
+            val editCountsUserResponse = async { ServiceFactory.getCoreRest(pageTitle.wikiSite).getEditCount(pageTitle.prefixedText, EditCount.EDIT_TYPE_EDITORS) }
+            val editCountsAnonResponse = async { ServiceFactory.getCoreRest(pageTitle.wikiSite).getEditCount(pageTitle.prefixedText, EditCount.EDIT_TYPE_ANONYMOUS) }
+            val editCountsBotResponse = async { ServiceFactory.getCoreRest(pageTitle.wikiSite).getEditCount(pageTitle.prefixedText, EditCount.EDIT_TYPE_BOT) }
+            val articleMetricsResponse = async { ServiceFactory.getRest(WikiSite("wikimedia.org")).getArticleMetrics(pageTitle.wikiSite.authority(), pageTitle.prefixedText, lastYear, today) }
 
-                val mwResponse = async { ServiceFactory.get(pageTitle.wikiSite).getRevisionDetailsAscending(pageTitle.prefixedText, 0, null) }
-                val editCountsResponse = async { ServiceFactory.getCoreRest(pageTitle.wikiSite).getEditCount(pageTitle.prefixedText, EditCount.EDIT_TYPE_EDITS) }
-                val editCountsUserResponse = async { ServiceFactory.getCoreRest(pageTitle.wikiSite).getEditCount(pageTitle.prefixedText, EditCount.EDIT_TYPE_EDITORS) }
-                val editCountsAnonResponse = async { ServiceFactory.getCoreRest(pageTitle.wikiSite).getEditCount(pageTitle.prefixedText, EditCount.EDIT_TYPE_ANONYMOUS) }
-                val editCountsBotResponse = async { ServiceFactory.getCoreRest(pageTitle.wikiSite).getEditCount(pageTitle.prefixedText, EditCount.EDIT_TYPE_BOT) }
-                val articleMetricsResponse = async { ServiceFactory.getRest(WikiSite("wikimedia.org")).getArticleMetrics(pageTitle.wikiSite.authority(), pageTitle.prefixedText, lastYear, today) }
+            val page = mwResponse.await().query?.pages?.first()
+            pageId = page?.pageId ?: -1
 
-                val page = mwResponse.await().query?.pages?.first()
-                pageId = page?.pageId ?: -1
-
-                editHistoryStatsData.postValue(Resource.Success(EditHistoryStats(
-                    page?.revisions?.first()!!,
-                    articleMetricsResponse.await().firstItem.results,
-                    editCountsResponse.await(),
-                    editCountsUserResponse.await(),
-                    editCountsAnonResponse.await(),
-                    editCountsBotResponse.await()
-                )))
-            }
+            editHistoryStatsData.postValue(Resource.Success(EditHistoryStats(
+                page?.revisions?.first()!!,
+                articleMetricsResponse.await().firstItem.results,
+                editCountsResponse.await(),
+                editCountsUserResponse.await(),
+                editCountsAnonResponse.await(),
+                editCountsBotResponse.await()
+            )))
         }
     }
 
@@ -193,13 +187,6 @@ class EditHistoryListViewModel(bundle: Bundle) : ViewModel() {
     class EditHistorySeparator(val date: String) : EditHistoryItemModel()
     class EditHistoryStats(val revision: MwQueryPage.Revision, val metrics: List<Metrics.Results>,
                            val allEdits: EditCount, val userEdits: EditCount, val anonEdits: EditCount, val botEdits: EditCount) : EditHistoryItemModel()
-
-    class Factory(private val bundle: Bundle) : ViewModelProvider.Factory {
-        @Suppress("unchecked_cast")
-        override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return EditHistoryListViewModel(bundle) as T
-        }
-    }
 
     companion object {
         const val SELECT_INACTIVE = 0

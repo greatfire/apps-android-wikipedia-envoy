@@ -1,5 +1,6 @@
 package org.wikipedia.page
 
+import android.app.Activity
 import android.content.Context
 import android.net.Uri
 import kotlinx.serialization.json.JsonObject
@@ -7,6 +8,9 @@ import kotlinx.serialization.json.jsonPrimitive
 import org.wikipedia.bridge.CommunicationBridge.JSEventListener
 import org.wikipedia.dataclient.WikiSite
 import org.wikipedia.page.LinkMovementMethodExt.UrlHandlerWithText
+import org.wikipedia.places.PlacesActivity
+import org.wikipedia.util.FeedbackUtil
+import org.wikipedia.util.StringUtil
 import org.wikipedia.util.UriUtil
 import org.wikipedia.util.log.L
 
@@ -28,6 +32,12 @@ abstract class LinkHandler(protected val context: Context) : JSEventListener, Ur
 
     override fun onUrlClick(url: String, titleString: String?, linkText: String) {
         var href = url
+        if (href.startsWith("mailto:")) {
+            val emailAddress = href.removePrefix("mailto:")
+            FeedbackUtil.composeEmail(context, emailAddress = emailAddress)
+            return
+        }
+
         if (href.startsWith("//")) {
             // for URLs without an explicit scheme, add our default scheme explicitly.
             href = wikiSite.scheme() + ":" + href
@@ -85,7 +95,12 @@ abstract class LinkHandler(protected val context: Context) : JSEventListener, Ur
                 onPageLinkClicked(uri.fragment!!, linkText)
             }
             !uri.getQueryParameter("title").isNullOrEmpty() && !uri.getQueryParameter("diff").isNullOrEmpty() && supportedAuthority -> {
-                onDiffLinkClicked(PageTitle(uri.getQueryParameter("title"), site), uri.getQueryParameter("diff")!!.toLong())
+                val diffAttr = uri.getQueryParameter("diff").orEmpty()
+                var diffRev = diffAttr.toLongOrNull() ?: -1
+                if (diffAttr == "next" || diffAttr == "prev") {
+                    diffRev = uri.getQueryParameter("oldid")?.toLongOrNull() ?: -1
+                }
+                onDiffLinkClicked(PageTitle(uri.getQueryParameter("title"), site), diffRev)
             }
             else -> {
                 onExternalLinkClicked(uri)
@@ -94,6 +109,12 @@ abstract class LinkHandler(protected val context: Context) : JSEventListener, Ur
     }
 
     open fun onExternalLinkClicked(uri: Uri) {
+        if (uri.authority.orEmpty().contains("geohack") && context is Activity) {
+            StringUtil.geoHackToLocation(uri.getQueryParameter("params"))?.let {
+                context.startActivity(PlacesActivity.newIntent(context, null, it))
+                return
+            }
+        }
         UriUtil.handleExternalLink(context, uri)
     }
 

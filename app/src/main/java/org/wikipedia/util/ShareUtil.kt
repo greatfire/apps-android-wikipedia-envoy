@@ -53,12 +53,10 @@ object ShareUtil {
                 title.getWebApiUrl("diff=$newId&oldid=$oldId&variant=${title.wikiSite.languageCode}"))
     }
 
-    fun shareImage(context: Context, bmp: Bitmap,
+    fun shareImage(coroutineScope: CoroutineScope, context: Context, bmp: Bitmap,
                    imageFileName: String, subject: String, text: String) {
-        CoroutineScope(Dispatchers.Default).launch(CoroutineExceptionHandler { _, msg ->
-            run {
-                displayOnCatchMessage(msg, context)
-            }
+        coroutineScope.launch(CoroutineExceptionHandler { _, msg ->
+            displayOnCatchMessage(msg, context)
         }) {
             val uri = withContext(Dispatchers.IO) { getUriFromFile(context, processBitmapForSharing(context, bmp, imageFileName)) }
             if (uri == null) {
@@ -81,7 +79,7 @@ object ShareUtil {
                 context.resources.getString(R.string.image_share_via))
     }
 
-    private fun getUriFromFile(context: Context, file: File?): Uri? {
+     fun getUriFromFile(context: Context, file: File?): Uri? {
         if (file == null) {
             return null
         }
@@ -123,14 +121,14 @@ object ShareUtil {
     }
 
     private fun getClearShareFolder(context: Context): File? {
-        try {
-            val dir = File(getShareFolder(context), "share")
-            FileUtil.deleteRecursively(dir)
-            return dir
+        return try {
+            File(getShareFolder(context), "share").also {
+                it.deleteRecursively()
+            }
         } catch (caught: Throwable) {
             L.e("Caught " + caught.message, caught)
+            null
         }
-        return null
     }
 
     private fun getShareFolder(context: Context): File {

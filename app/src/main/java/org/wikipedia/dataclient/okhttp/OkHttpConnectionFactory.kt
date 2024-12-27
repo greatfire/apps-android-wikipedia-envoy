@@ -1,14 +1,19 @@
 package org.wikipedia.dataclient.okhttp
 
+import android.os.Build
 import okhttp3.Cache
 import okhttp3.CacheControl
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
+import okhttp3.tls.HandshakeCertificates
 import org.greatfire.envoy.CronetInterceptor
+import org.wikipedia.R
 import org.wikipedia.WikipediaApp
 import org.wikipedia.dataclient.SharedPreferenceCookieManager
 import org.wikipedia.settings.Prefs
 import java.io.File
+import java.security.cert.CertificateFactory
+import java.security.cert.X509Certificate
 import java.util.concurrent.TimeUnit
 
 object OkHttpConnectionFactory {
@@ -22,21 +27,32 @@ object OkHttpConnectionFactory {
     val client = createClient()
 
     private fun createClient(): OkHttpClient {
-        return OkHttpClient.Builder()
-                .cookieJar(SharedPreferenceCookieManager.getInstance())
-                .cache(NET_CACHE)
-                .readTimeout(20, TimeUnit.SECONDS)
-                .addInterceptor(HttpLoggingInterceptor().setLevel(Prefs.retrofitLogLevel))
-                .addInterceptor(UnsuccessfulResponseInterceptor())
-                .addNetworkInterceptor(CacheControlInterceptor())
-                .addInterceptor(CommonHeaderRequestInterceptor())
-                .addInterceptor(DefaultMaxStaleRequestInterceptor())
-                .addInterceptor(OfflineCacheInterceptor())
-                .addInterceptor(TestStubInterceptor())
-                .addInterceptor(TitleEncodeInterceptor())
-                // this interceptor will be bypassed if no valid proxy urls were found at startup
-                // the app will connect to the internet directly if possible
-                .addInterceptor(CronetInterceptor())
+        val builder = OkHttpClient.Builder()
+            .cookieJar(SharedPreferenceCookieManager.instance)
+            .cache(NET_CACHE)
+            .readTimeout(20, TimeUnit.SECONDS)
+            .addInterceptor(UnsuccessfulResponseInterceptor())
+            .addNetworkInterceptor(CacheControlInterceptor())
+            .addInterceptor(CommonHeaderRequestInterceptor())
+            .addInterceptor(DefaultMaxStaleRequestInterceptor())
+            .addInterceptor(OfflineCacheInterceptor())
+            .addInterceptor(TestStubInterceptor())
+            .addInterceptor(TitleEncodeInterceptor())
+            .addInterceptor(HttpLoggingInterceptor().setLevel(Prefs.retrofitLogLevel))
+            // this interceptor will be bypassed if no valid proxy urls were found at startup
+            // the app will connect to the internet directly if possible
+            .addInterceptor(CronetInterceptor())
+
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
+            val certFactory = CertificateFactory.getInstance("X.509")
+            val certificates = HandshakeCertificates.Builder()
+                .addPlatformTrustedCertificates()
+                .addTrustedCertificate(certFactory.generateCertificate(WikipediaApp.instance.resources.openRawResource(R.raw.isrg_root_x1)) as X509Certificate)
+                .addTrustedCertificate(certFactory.generateCertificate(WikipediaApp.instance.resources.openRawResource(R.raw.isrg_root_x2)) as X509Certificate)
                 .build()
+            builder.sslSocketFactory(certificates.sslSocketFactory(), certificates.trustManager)
+        }
+
+        return builder.build()
     }
 }

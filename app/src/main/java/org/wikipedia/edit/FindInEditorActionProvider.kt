@@ -9,7 +9,6 @@ import org.wikipedia.util.DeviceUtil
 import org.wikipedia.util.DimenUtil
 import org.wikipedia.views.FindInPageActionProvider
 import org.wikipedia.views.FindInPageActionProvider.FindInPageListener
-import java.util.*
 
 class FindInEditorActionProvider(private val scrollView: View,
                                  private val textView: SyntaxHighlightableEditText,
@@ -59,32 +58,34 @@ class FindInEditorActionProvider(private val scrollView: View,
     }
 
     override fun onSearchTextChanged(text: String?) {
-        searchQuery = if (text.isNullOrEmpty()) null else text
+        searchQuery = text?.ifEmpty { null }
         currentResultIndex = 0
         resultPositions.clear()
-
-        searchQuery?.let {
-            val searchTextLower = it.lowercase(Locale.getDefault())
-            val textLower = textView.text.toString().lowercase(Locale.getDefault())
-            var position = 0
-            do {
-                position = textLower.indexOf(searchTextLower, position)
-                if (position >= 0) {
-                    resultPositions.add(position)
-                    position += searchTextLower.length
+        searchQuery?.let { query ->
+            val textToSearch = textView.text
+            var index = 0
+            while (index >= 0 && index < textToSearch.length) {
+                index = textToSearch.indexOf(query, index, ignoreCase = true)
+                if (index >= 0) {
+                    resultPositions.add(index)
+                    index += query.length
                 }
-            } while (position >= 0)
+            }
         }
         scrollToCurrentResult()
     }
 
     private fun scrollToCurrentResult() {
         setMatchesResults(currentResultIndex, resultPositions.size)
-        val textPosition = resultPositions.getOrElse(currentResultIndex) { 0 }
-        textView.setSelection(textPosition, textPosition + searchQuery.orEmpty().length)
+        var highlightLength = searchQuery.orEmpty().length
+        val textPosition = resultPositions.getOrElse(currentResultIndex) {
+            highlightLength = 0
+            0
+        }
+        textView.setSelection(textPosition, textPosition + highlightLength)
         val r = Rect()
         textView.getFocusedRect(r)
         scrollView.scrollTo(0, r.top - DimenUtil.roundedDpToPx(32f))
-        syntaxHighlighter.setSearchQueryInfo(resultPositions, searchQuery.orEmpty().length, currentResultIndex)
+        syntaxHighlighter.setSearchQueryInfo(resultPositions, highlightLength, currentResultIndex)
     }
 }

@@ -1,10 +1,10 @@
 package org.wikipedia.dataclient
 
 import androidx.collection.lruCache
-import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Response
+import okhttp3.logging.HttpLoggingInterceptor
 import org.wikipedia.WikipediaApp
 import org.wikipedia.analytics.eventplatform.DestinationEventService
 import org.wikipedia.analytics.eventplatform.EventService
@@ -13,7 +13,7 @@ import org.wikipedia.dataclient.okhttp.OkHttpConnectionFactory
 import org.wikipedia.json.JsonUtil
 import org.wikipedia.settings.Prefs
 import retrofit2.Retrofit
-import retrofit2.adapter.rxjava3.RxJava3CallAdapterFactory
+import retrofit2.converter.kotlinx.serialization.asConverterFactory
 import retrofit2.create
 import java.io.IOException
 
@@ -61,7 +61,11 @@ object ServiceFactory {
     }
 
     private fun getBasePath(wiki: WikiSite): String {
-        return Prefs.mediaWikiBaseUrl.ifEmpty { wiki.url() + "/" }
+        var path = wiki.url()
+        if (!path.endsWith("/")) {
+            path += "/"
+        }
+        return path
     }
 
     fun getRestBasePath(wiki: WikiSite): String {
@@ -74,12 +78,12 @@ object ServiceFactory {
     }
 
     private fun createRetrofit(wiki: WikiSite?, baseUrl: String): Retrofit {
+        val builder = OkHttpConnectionFactory.client.newBuilder()
+        builder.interceptors().add(builder.interceptors().indexOfFirst { it is HttpLoggingInterceptor }, LanguageVariantHeaderInterceptor(wiki))
+
         return Retrofit.Builder()
             .baseUrl(baseUrl)
-            .client(OkHttpConnectionFactory.client.newBuilder()
-                .addInterceptor(LanguageVariantHeaderInterceptor(wiki))
-                .build())
-            .addCallAdapterFactory(RxJava3CallAdapterFactory.create())
+            .client(builder.build())
             .addConverterFactory(JsonUtil.json.asConverterFactory("application/json".toMediaType()))
             .build()
     }

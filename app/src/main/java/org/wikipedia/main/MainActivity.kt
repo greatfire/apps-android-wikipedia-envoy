@@ -8,6 +8,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.view.ActionMode
 import androidx.appcompat.widget.Toolbar
+import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import org.greatfire.envoy.*
@@ -16,16 +17,23 @@ import org.wikipedia.BuildConfig
 import org.wikipedia.Constants
 import org.wikipedia.R
 import org.wikipedia.activity.SingleFragmentActivity
+import org.wikipedia.analytics.eventplatform.ContributionsDashboardEvent
+import org.wikipedia.analytics.eventplatform.ImageRecommendationsEvent
+import org.wikipedia.analytics.eventplatform.PatrollerExperienceEvent
+import org.wikipedia.auth.AccountUtil
 import org.wikipedia.databinding.ActivityMainBinding
 import org.wikipedia.dataclient.WikiSite
-import org.wikipedia.events.EventHandler
+import org.wikipedia.donate.DonorStatus
+import org.wikipedia.feed.FeedFragment
 import org.wikipedia.navtab.NavTab
 import org.wikipedia.onboarding.InitialOnboardingActivity
 import org.wikipedia.page.PageActivity
 import org.wikipedia.settings.Prefs
+import org.wikipedia.usercontrib.ContributionsDashboardHelper
 import org.wikipedia.util.DimenUtil
 import org.wikipedia.util.FeedbackUtil
 import org.wikipedia.util.ResourceUtil
+import org.wikipedia.views.DonorBadgeView
 
 class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callback {
 
@@ -34,6 +42,7 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
     private val DIRECT_URL = arrayListOf<String>("https://www.wikipedia.org/")
 
     // event logging
+    /*
     private var eventHandler: EventHandler? = null
     private val EVENT_TAG_SELECT = "SELECTED_URL"
     private val EVENT_PARAM_SELECT_URL = "selected_url_value"
@@ -60,11 +69,17 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
     private val EVENT_PARAM_VALIDATION_SECONDS = "validation_time_seconds"
     private val EVENT_TAG_VALIDATION_ENDED = "VALIDATION_ENDED"
     private val EVENT_PARAM_VALIDATION_ENDED_CAUSE = "validation_ended_cause"
+    */
 
     private lateinit var binding: ActivityMainBinding
 
     private var controlNavTabInFragment = false
-    private val onboardingLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { }
+    private val onboardingLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        val fragment = fragment.currentFragment
+        if (it.resultCode == InitialOnboardingActivity.RESULT_LANGUAGE_CHANGED && fragment is FeedFragment) {
+            fragment.refresh()
+        }
+    }
 
     private var waitingForEnvoy = false
     private var envoyUnused = false
@@ -127,15 +142,15 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
                                 validationSeconds = 1
                             }
 
-                            val bundle = Bundle()
-                            bundle.putLong(EVENT_PARAM_VALIDATION_SECONDS, validationSeconds)
-                            eventHandler?.logEvent(EVENT_TAG_VALIDATION_TIME, bundle)
+                            //val bundle = Bundle()
+                            //bundle.putLong(EVENT_PARAM_VALIDATION_SECONDS, validationSeconds)
+                            //eventHandler?.logEvent(EVENT_TAG_VALIDATION_TIME, bundle)
                         }
 
-                        val bundle = Bundle()
-                        bundle.putString(EVENT_PARAM_SELECT_URL, sanitizedUrl)
-                        bundle.putString(EVENT_PARAM_SELECT_SERVICE, validService)
-                        eventHandler?.logEvent(EVENT_TAG_SELECT, bundle)
+                        //val bundle = Bundle()
+                        //bundle.putString(EVENT_PARAM_SELECT_URL, sanitizedUrl)
+                        //bundle.putString(EVENT_PARAM_SELECT_SERVICE, validService)
+                        //eventHandler?.logEvent(EVENT_TAG_SELECT, bundle)
 
                         if (DIRECT_URL.contains(validUrl)) {
 
@@ -157,10 +172,10 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
                         }
                     } else {
 
-                        val bundle = Bundle()
-                        bundle.putString(EVENT_PARAM_VALID_URL, sanitizedUrl)
-                        bundle.putString(EVENT_PARAM_VALID_SERVICE, validService)
-                        eventHandler?.logEvent(EVENT_TAG_VALID, bundle)
+                        //val bundle = Bundle()
+                        //bundle.putString(EVENT_PARAM_VALID_URL, sanitizedUrl)
+                        //bundle.putString(EVENT_PARAM_VALID_SERVICE, validService)
+                        //eventHandler?.logEvent(EVENT_TAG_VALID, bundle)
 
                         Log.d(TAG, "already received a valid url, ignore additional valid url: " + sanitizedUrl)
                     }
@@ -182,10 +197,10 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
                         Log.e(TAG, "received an invalid url that was empty or null")
                     } else {
 
-                        val bundle = Bundle()
-                        bundle.putString(EVENT_PARAM_INVALID_URL, sanitizedUrl)
-                        bundle.putString(EVENT_PARAM_INVALID_SERVICE, invalidService)
-                        eventHandler?.logEvent(EVENT_TAG_INVALID, bundle)
+                        //val bundle = Bundle()
+                        //bundle.putString(EVENT_PARAM_INVALID_URL, sanitizedUrl)
+                        //bundle.putString(EVENT_PARAM_INVALID_SERVICE, invalidService)
+                        //eventHandler?.logEvent(EVENT_TAG_INVALID, bundle)
 
                         Log.d(TAG, "received an invalid url: " + sanitizedUrl)
                     }
@@ -198,17 +213,17 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
                         // may be redundant, direct urls should not be included in batch
                         urlBatch.removeAll(DIRECT_URL)
 
-                        val bundle = Bundle()
+                        //val bundle = Bundle()
                         // parameter limit is 100 characters, arrays not allowed
-                        bundle.putString(
-                            EVENT_PARAM_VALID_URLS,
-                            UrlUtil.sanitizeUrlList(urlBatch, serviceBatch)
-                        )
-                        bundle.putString(
-                            EVENT_PARAM_VALID_SERVICES,
-                            UrlUtil.sanitizeServiceList(serviceBatch)
-                        )
-                        eventHandler?.logEvent(EVENT_TAG_VALID_BATCH, bundle)
+                        //bundle.putString(
+                        //    EVENT_PARAM_VALID_URLS,
+                        //    UrlUtil.sanitizeUrlList(urlBatch, serviceBatch)
+                        //)
+                        //bundle.putString(
+                        //    EVENT_PARAM_VALID_SERVICES,
+                        //    UrlUtil.sanitizeServiceList(serviceBatch)
+                        //)
+                        //eventHandler?.logEvent(EVENT_TAG_VALID_BATCH, bundle)
                     }
                 } else if (intent.action == ENVOY_BROADCAST_BATCH_FAILED) {
                     val urlBatch = intent.getStringArrayListExtra(ENVOY_DATA_URL_LIST)
@@ -219,20 +234,20 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
                         // may be redundant, direct urls should not be included in batch
                         urlBatch.removeAll(DIRECT_URL)
 
-                        val bundle = Bundle()
+                        //val bundle = Bundle()
                         // parameter limit is 100 characters, arrays not allowed
-                        bundle.putString(
-                            EVENT_PARAM_INVALID_URLS,
-                            UrlUtil.sanitizeUrlList(urlBatch, serviceBatch)
-                        )
-                        bundle.putString(
-                            EVENT_PARAM_INVALID_SERVICES,
-                            UrlUtil.sanitizeServiceList(serviceBatch)
-                        )
-                        eventHandler?.logEvent(EVENT_TAG_INVALID_BATCH, bundle)
+                        //bundle.putString(
+                        //    EVENT_PARAM_INVALID_URLS,
+                        //    UrlUtil.sanitizeUrlList(urlBatch, serviceBatch)
+                        //)
+                        //bundle.putString(
+                        //    EVENT_PARAM_INVALID_SERVICES,
+                        //    UrlUtil.sanitizeServiceList(serviceBatch)
+                        //)
+                        //eventHandler?.logEvent(EVENT_TAG_INVALID_BATCH, bundle)
                     }
                 } else if (intent.action == ENVOY_BROADCAST_UPDATE_SUCCEEDED) {
-                    val bundle = Bundle()
+                    //val bundle = Bundle()
                     val url = intent.getStringExtra(ENVOY_DATA_UPDATE_URL)
 
                     val msg = intent.getStringExtra(ENVOY_DATA_UPDATE_STATUS) ?: "null successful update message"
@@ -245,7 +260,7 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
                     } else {
                         val sanitizedUrl = UrlUtil.sanitizeUrl(url, ENVOY_SERVICE_UPDATE)
                         Log.d(TAG, "envoy update succeeded for url: " + sanitizedUrl)
-                        bundle.putString(EVENT_PARAM_UPDATE_SUCCEEDED_URL, sanitizedUrl)
+                        //bundle.putString(EVENT_PARAM_UPDATE_SUCCEEDED_URL, sanitizedUrl)
                         status = status + "got update from " + sanitizedUrl + ": "
                     }
                     val extraUrls = intent.getStringArrayListExtra(ENVOY_DATA_UPDATE_LIST)
@@ -253,14 +268,14 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
                         Log.e(TAG, "received an envoy update succeeded broadcast with no list")
                         status = status + "no urls"
                     } else {
-                        bundle.putInt(EVENT_PARAM_UPDATE_SUCCEEDED_COUNT, extraUrls.size)
+                        //bundle.putInt(EVENT_PARAM_UPDATE_SUCCEEDED_COUNT, extraUrls.size)
                         status = status + extraUrls.size + " urls"
                     }
-                    eventHandler?.logEvent(EVENT_TAG_UPDATE_SUCCEEDED, bundle)
+                    //eventHandler?.logEvent(EVENT_TAG_UPDATE_SUCCEEDED, bundle)
                     updateMessages.add(status)
                     Prefs.updateMessages = updateMessages
                 } else if (intent.action == ENVOY_BROADCAST_UPDATE_FAILED) {
-                    val bundle = Bundle()
+                    //val bundle = Bundle()
                     val url = intent.getStringExtra(ENVOY_DATA_UPDATE_URL)
 
                     val msg = intent.getStringExtra(ENVOY_DATA_UPDATE_STATUS) ?: "null failed update message"
@@ -273,13 +288,13 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
                     } else {
                         val sanitizedUrl = UrlUtil.sanitizeUrl(url, ENVOY_SERVICE_UPDATE)
                         Log.d(TAG, "envoy update failed for url: " + sanitizedUrl)
-                        bundle.putString(EVENT_PARAM_UPDATE_FAILED_URL, sanitizedUrl)
+                        //bundle.putString(EVENT_PARAM_UPDATE_FAILED_URL, sanitizedUrl)
                     }
-                    eventHandler?.logEvent(EVENT_TAG_UPDATE_FAILED, bundle)
+                    //eventHandler?.logEvent(EVENT_TAG_UPDATE_FAILED, bundle)
                 } else if (intent.action == ENVOY_BROADCAST_VALIDATION_CONTINUED) {
                     Log.d(TAG, "received an envoy continuation broadcast")
-                    val bundle = Bundle()
-                    eventHandler?.logEvent(EVENT_TAG_CONTINUED, bundle)
+                    //val bundle = Bundle()
+                    //eventHandler?.logEvent(EVENT_TAG_CONTINUED, bundle)
                 } else if (intent.action == ENVOY_BROADCAST_VALIDATION_ENDED) {
                     Log.e(TAG, "received an envoy validation ended broadcast")
 
@@ -296,18 +311,18 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
                             validationSeconds = 1
                         }
 
-                        val bundle = Bundle()
-                        bundle.putLong(EVENT_PARAM_VALIDATION_SECONDS, validationSeconds)
-                        eventHandler?.logEvent(EVENT_TAG_VALIDATION_TIME, bundle)
+                        //val bundle = Bundle()
+                        //bundle.putLong(EVENT_PARAM_VALIDATION_SECONDS, validationSeconds)
+                        //eventHandler?.logEvent(EVENT_TAG_VALIDATION_TIME, bundle)
                     }
 
                     val cause = intent.getStringExtra(ENVOY_DATA_VALIDATION_ENDED_CAUSE)
                     if (cause.isNullOrEmpty()) {
                         Log.e(TAG, "received an envoy validation ended broadcast with an invalid cause")
                     } else {
-                        val bundle = Bundle()
-                        bundle.putString(EVENT_PARAM_VALIDATION_ENDED_CAUSE, cause)
-                        eventHandler?.logEvent(EVENT_TAG_VALIDATION_ENDED, bundle)
+                        //val bundle = Bundle()
+                        //bundle.putString(EVENT_PARAM_VALIDATION_ENDED_CAUSE, cause)
+                        //eventHandler?.logEvent(EVENT_TAG_VALIDATION_ENDED, bundle)
 
                         // display dialog to allow user to retry if possible
                         if (envoyUnused == true) {
@@ -437,23 +452,19 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
         envoyUnused = false
 
         // firebase logging
-        if (Prefs.isFirebaseLoggingEnabled) {
-            eventHandler = EventHandler(applicationContext)
-        } else {
-            Log.d("ENVOY_LOG", "firebase logging off, don't initialize firebase")
-            eventHandler = null
-        }
+        //if (Prefs.isFirebaseLoggingEnabled) {
+        //    eventHandler = EventHandler(applicationContext)
+        //} else {
+        //    Log.d("ENVOY_LOG", "firebase logging off, don't initialize firebase")
+        //    eventHandler = null
+        //}
 
         setImageZoomHelper()
-        if (Prefs.isInitialOnboardingEnabled && savedInstanceState == null && !intent.hasExtra(Constants.INTENT_EXTRA_IMPORT_READING_LISTS)) {
-            // Updating preference so the search multilingual tooltip
-            // is not shown again for first time users
-            Prefs.isMultilingualSearchTooltipShown = false
-
-            // Use startActivityForResult to avoid preload the Feed contents before finishing the initial onboarding.
+        if (Prefs.isInitialOnboardingEnabled && savedInstanceState == null &&
+            !intent.hasExtra(Constants.INTENT_EXTRA_PREVIEW_SAVED_READING_LISTS)) {
             onboardingLauncher.launch(InitialOnboardingActivity.newIntent(this))
         }
-        setNavigationBarColor(ResourceUtil.getThemedColor(this, R.attr.nav_tab_background_color))
+        setNavigationBarColor(ResourceUtil.getThemedColor(this, R.attr.paper_color))
         setSupportActionBar(binding.mainToolbar)
         supportActionBar?.title = ""
         supportActionBar?.setDisplayHomeAsUpEnabled(false)
@@ -524,14 +535,41 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
     }
 
     override fun onTabChanged(tab: NavTab) {
-        binding.mainToolbar.setTitle(tab.text())
         if (tab == NavTab.EXPLORE) {
+            binding.mainToolbarWordmark.visibility = View.VISIBLE
+            binding.mainToolbar.title = ""
+            binding.toolbarTitle.isVisible = false
+            binding.donorBadge.isVisible = false
             controlNavTabInFragment = false
         } else {
+            binding.toolbarTitle.isVisible = true
+            binding.donorBadge.isVisible = false
             if (tab == NavTab.SEARCH && Prefs.showSearchTabTooltip) {
-                FeedbackUtil.showTooltip(this, fragment.binding.mainNavTabLayout.findViewById(NavTab.SEARCH.id()), getString(R.string.search_tab_tooltip), aboveOrBelow = true, autoDismiss = false)
+                FeedbackUtil.showTooltip(this, fragment.binding.mainNavTabLayout.findViewById(NavTab.SEARCH.id), getString(R.string.search_tab_tooltip), aboveOrBelow = true, autoDismiss = false)
                 Prefs.showSearchTabTooltip = false
             }
+            var titleText = getString(tab.text)
+            if (tab == NavTab.EDITS) {
+                ImageRecommendationsEvent.logImpression("suggested_edit_dialog")
+                PatrollerExperienceEvent.logImpression("suggested_edits_dialog")
+                if (ContributionsDashboardHelper.contributionsDashboardEnabled) {
+                    titleText = if (AccountUtil.isLoggedIn) {
+                        AccountUtil.userName
+                    } else {
+                        getString(R.string.contributions_dashboard_logged_out_user)
+                    }
+                    binding.donorBadge.disableClickForDonor()
+                    binding.donorBadge.setup(object : DonorBadgeView.Callback {
+                        override fun onBecomeDonorClick() {
+                            ContributionsDashboardEvent.logAction("donate_start_click", "contrib_dashboard", campaignId = ContributionsDashboardHelper.CAMPAIGN_ID)
+                            launchDonateDialog(campaignId = ContributionsDashboardHelper.CAMPAIGN_ID)
+                        }
+                    })
+                    binding.donorBadge.isVisible = DonorStatus.donorStatus() != DonorStatus.UNKNOWN
+                }
+            }
+            binding.mainToolbarWordmark.visibility = View.GONE
+            binding.toolbarTitle.text = titleText
             controlNavTabInFragment = true
         }
         fragment.requestUpdateToolbarElevation()

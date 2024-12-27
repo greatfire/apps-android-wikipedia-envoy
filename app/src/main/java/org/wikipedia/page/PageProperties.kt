@@ -13,11 +13,11 @@ import org.wikipedia.util.DateUtil
 import org.wikipedia.util.DimenUtil
 import org.wikipedia.util.ImageUrlUtil
 import org.wikipedia.util.UriUtil
-import java.util.*
+import java.util.Date
 
 @Parcelize
 @TypeParceler<Date, DateParceler>()
-data class PageProperties constructor(
+data class PageProperties(
     val pageId: Int = 0,
     val namespace: Namespace,
     val revisionId: Long = 0,
@@ -60,13 +60,10 @@ data class PageProperties constructor(
         leadImageName = UriUtil.decodeURL(pageSummary.leadImageName.orEmpty()),
         leadImageWidth = pageSummary.thumbnailWidth,
         leadImageHeight = pageSummary.thumbnailHeight,
-        geo = pageSummary.geo,
+        geo = pageSummary.coordinates,
         wikiBaseItem = pageSummary.wikiBaseItem,
         descriptionSource = pageSummary.descriptionSource
     )
-
-    constructor(title: PageTitle, isMainPage: Boolean) : this(namespace = title.namespace(),
-        displayTitle = title.displayText, isMainPage = isMainPage)
 
     private val isLoggedInUserAllowedToEdit: Boolean
         get() = protection?.run { AccountUtil.isMemberOf(editRoles) } ?: false

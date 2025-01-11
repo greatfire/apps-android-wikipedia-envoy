@@ -52,4 +52,6 @@
     <color name="widget_primary">#202122</color>
     <color name="widget_placeholder">#72777D</color>
 
+    <color name="base10">#202122</color> <!-- W AAA: Copy color, Buttons / widgets text -->
+
 </resources>

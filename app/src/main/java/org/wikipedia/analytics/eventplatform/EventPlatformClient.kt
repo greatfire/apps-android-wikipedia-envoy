@@ -34,7 +34,9 @@ object EventPlatformClient {
      * Inputs: network connection state on/off, connection state bad y/n?
      * Taken out of iOS client, but flag can be set on the request object to wait until connected to send
      */
-    private var ENABLED = WikipediaApp.instance.isOnline
+    // hard code as disabled to preserve privacy
+    // private var ENABLED = WikipediaApp.instance.isOnline
+    private val ENABLED = false
 
     private val coroutineScope = CoroutineScope(Dispatchers.IO)
 
@@ -51,7 +53,8 @@ object EventPlatformClient {
      * as other considerations.
      */
     fun setEnabled(enabled: Boolean) {
-        ENABLED = enabled
+        // hard coded as disabled so do not update
+        // ENABLED = enabled
         if (ENABLED) {
             /*
              * Try immediately to send any enqueued items. Otherwise another
@@ -116,7 +119,9 @@ object EventPlatformClient {
          */
         private const val WAIT_MS = 30000L
         private const val TOKEN = "sendScheduled"
-        private val MAX_QUEUE_SIZE get() = Prefs.analyticsQueueSize
+        // hard coded as disabled so set queue size as 0
+        // private val MAX_QUEUE_SIZE get() = Prefs.analyticsQueueSize
+        private val MAX_QUEUE_SIZE get() = 0
 
         fun sendAllScheduled() {
             WikipediaApp.instance.mainThreadHandler.removeCallbacksAndMessages(TOKEN)

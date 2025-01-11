@@ -211,7 +211,7 @@
                     android:layout_height="24dp"
                     android:contentDescription="@null"
                     app:srcCompat="@drawable/ic_anonymous_black_24dp"
-                    app:tint="?attr/material_theme_secondary_color" />
+                    app:tint="?attr/secondary_color" />
 
                 <androidx.appcompat.widget.AppCompatImageView
                     android:id="@+id/main_drawer_proxy_on"
@@ -220,7 +220,7 @@
                     android:layout_height="24dp"
                     android:contentDescription="@null"
                     app:srcCompat="@drawable/ic_check_black_24dp"
-                    app:tint="?attr/material_theme_secondary_color"
+                    app:tint="?attr/secondary_color"
                     android:visibility="gone" />
 
                 <androidx.appcompat.widget.AppCompatImageView
@@ -230,7 +230,7 @@
                     android:layout_height="24dp"
                     android:contentDescription="@null"
                     app:srcCompat="@drawable/ic_close_black_24dp"
-                    app:tint="?attr/material_theme_secondary_color"
+                    app:tint="?attr/secondary_color"
                     android:visibility="gone" />
 
             </LinearLayout>
@@ -246,7 +246,7 @@
                     android:layout_gravity="top"
                     android:contentDescription="@null"
                     app:srcCompat="@drawable/ic_check_black_24dp"
-                    app:tint="?attr/material_theme_secondary_color" />
+                    app:tint="?attr/secondary_color" />
 
                 <TextView
                     android:id="@+id/main_drawer_valid_text"
@@ -271,7 +271,7 @@
                     android:layout_gravity="top"
                     android:contentDescription="@null"
                     app:srcCompat="@drawable/ic_close_black_24dp"
-                    app:tint="?attr/material_theme_secondary_color" />
+                    app:tint="?attr/secondary_color" />
 
                 <TextView
                     android:id="@+id/main_drawer_invalid_text"
@@ -296,7 +296,7 @@
                     android:layout_gravity="top"
                     android:contentDescription="@null"
                     app:srcCompat="@drawable/ic_chip_add_24px"
-                    app:tint="?attr/material_theme_secondary_color" />
+                    app:tint="?attr/secondary_color" />
 
                 <TextView
                     android:id="@+id/main_drawer_update_text"

@@ -19,6 +19,8 @@ import org.wikipedia.main.MainActivity
 import org.wikipedia.main.MainFragment
 import org.wikipedia.navtab.NavTab
 import org.wikipedia.onboarding.InitialOnboardingActivity
+import org.wikipedia.onboarding.InitialOnboardingFragment
+import org.wikipedia.onboarding.InitialOnboardingFragment.OnboardingPage
 import org.wikipedia.page.ExclusiveBottomSheetPresenter
 
 object BreadCrumbViewUtil {

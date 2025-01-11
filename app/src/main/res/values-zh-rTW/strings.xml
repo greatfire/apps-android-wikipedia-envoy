@@ -1507,17 +1507,6 @@
   <string name="media_playback_error">播放媒體時出錯。</string>
   <string name="user_contrib_menu_label">貢獻</string>
   <string name="user_contrib_filter_activity_title">篩選貢獻</string>
-<<<<<<< HEAD
-
-  <string name="retry_dialog_title">重试？</string>
-  <string name="retry_dialog_content">自由维基无法连接到网络, 但仍有备用方案。您是否愿意重试？</string>
-  <string name="retry_dialog_button_retry">确认</string>
-  <string name="retry_dialog_button_close">取消</string>
-  <string name="failure_dialog_title">连接失败</string>
-  <string name="failure_dialog_content">自由维基无法连接到网络, 所有备用方案也失败。请稍等一段时间再重试。</string>
-  <string name="failure_dialog_button_close">确认</string>
-
-=======
   <string name="action_item_view_on_map">在地圖上查看</string>
   <string name="action_item_view_on_map_unavailable">此頁面的地理座標不可用</string>
   <string name="shareable_reading_lists_import_dialog_title">匯入分享閱讀清單</string>
@@ -1770,5 +1759,12 @@
   <string name="survey_dialog_submit">提交</string>
   <string name="survey_dialog_input_hint">額外回饋</string>
   <string name="survey_dialog_submitted_snackbar">意見回饋提交成功。謝謝！</string>
->>>>>>> cbea757a2d74cf6257c0d8ce120e186c53b6745c
+
+  <string name="retry_dialog_title">重试？</string>
+  <string name="retry_dialog_content">自由维基无法连接到网络, 但仍有备用方案。您是否愿意重试？</string>
+  <string name="retry_dialog_button_retry">确认</string>
+  <string name="retry_dialog_button_close">取消</string>
+  <string name="failure_dialog_title">连接失败</string>
+  <string name="failure_dialog_content">自由维基无法连接到网络, 所有备用方案也失败。请稍等一段时间再重试。</string>
+  <string name="failure_dialog_button_close">确认</string>
 </resources>

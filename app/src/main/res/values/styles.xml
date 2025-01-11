@@ -470,6 +470,14 @@
         <item name="strokeColor">@color/blue600</item>
     </style>
 
+    <style name="TransparentButton" parent="@style/Widget.MaterialComponents.Button.UnelevatedButton">
+        <item name="android:textAlignment">center</item>
+        <item name="android:backgroundTint">@android:color/transparent</item>
+        <item name="backgroundTint">@android:color/transparent</item>
+        <item name="android:foreground">?android:selectableItemBackground</item>
+        <item name="android:focusable">true</item>
+    </style>
+
     <style name="AppPreferenceTheme" parent="PreferenceThemeOverlay">
         <item name="preferenceFragmentCompatStyle">@style/AppPreferenceFragment</item>
         <item name="android:disabledAlpha">0.5</item>

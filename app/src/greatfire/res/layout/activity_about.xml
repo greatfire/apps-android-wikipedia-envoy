@@ -37,7 +37,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
                 android:layout_marginBottom="16dp"
-                android:textColor="?attr/material_theme_primary_color"
+                android:textColor="?attr/primary_color"
                 android:textIsSelectable="true"
                 tools:text="2.x-sample-version" />
 
@@ -47,7 +47,7 @@
                 android:layout_marginTop="20dp"
                 android:layout_marginBottom="8dp"
                 android:text="@string/about_contributors_heading"
-                android:textColor="?attr/material_theme_primary_color"
+                android:textColor="?attr/primary_color"
                 android:textSize="16sp" />
 
             <org.wikipedia.views.AppTextView
@@ -59,7 +59,7 @@
                 android:lineSpacingExtra="6sp"
                 android:text="@string/about_contributors"
                 android:textAppearance="?android:attr/textAppearanceSmall"
-                android:textColor="?attr/material_theme_secondary_color"
+                android:textColor="?attr/secondary_color"
                 android:textIsSelectable="true" />
 
             <TextView
@@ -68,7 +68,7 @@
                 android:layout_marginTop="20dp"
                 android:layout_marginBottom="8dp"
                 android:text="@string/about_translators_heading"
-                android:textColor="?attr/material_theme_primary_color"
+                android:textColor="?attr/primary_color"
                 android:textSize="16sp" />
 
             <org.wikipedia.views.AppTextView
@@ -79,7 +79,7 @@
                 android:lineSpacingExtra="6sp"
                 android:text="@string/about_translators_translatewiki"
                 android:textAppearance="?android:attr/textAppearanceSmall"
-                android:textColor="?attr/material_theme_secondary_color"
+                android:textColor="?attr/secondary_color"
                 android:textIsSelectable="true" />
 
             <TextView
@@ -88,7 +88,7 @@
                 android:layout_marginTop="20dp"
                 android:layout_marginBottom="8dp"
                 android:text="@string/about_libraries_heading"
-                android:textColor="?attr/material_theme_primary_color"
+                android:textColor="?attr/primary_color"
                 android:textSize="16sp" />
 
             <org.wikipedia.views.AppTextView
@@ -100,7 +100,7 @@
                 android:lineSpacingExtra="6sp"
                 android:text="@string/libraries_list"
                 android:textAppearance="?android:attr/textAppearanceSmall"
-                android:textColor="?attr/material_theme_secondary_color"
+                android:textColor="?attr/secondary_color"
                 android:textIsSelectable="true" />
 
             <TextView
@@ -109,7 +109,7 @@
                 android:layout_marginTop="20dp"
                 android:layout_marginBottom="8dp"
                 android:text="@string/about_app_license_heading"
-                android:textColor="?attr/material_theme_primary_color"
+                android:textColor="?attr/primary_color"
                 android:textSize="16sp" />
 
             <org.wikipedia.views.AppTextView
@@ -119,7 +119,7 @@
                 android:lineSpacingExtra="6sp"
                 android:text="@string/about_app_license"
                 android:textAppearance="?android:attr/textAppearanceSmall"
-                android:textColor="?attr/material_theme_secondary_color"
+                android:textColor="?attr/secondary_color"
                 android:textIsSelectable="true" />
 
             <Button
@@ -143,7 +143,7 @@
             android:layout_gravity="center_horizontal"
             android:layout_marginTop="24dp"
             android:contentDescription="@null"
-            app:tint="?attr/secondary_text_color"
+            app:tint="?attr/secondary_color"
             app:srcCompat="@drawable/ic_wmf_logo" />
 
         <org.wikipedia.views.AppTextView
@@ -155,7 +155,7 @@
             android:layout_marginTop="14dp"
             android:layout_marginBottom="16dp"
             android:text="@string/about_wmf"
-            android:textColor="?attr/material_theme_secondary_color"
+            android:textColor="?attr/secondary_color"
             android:textIsSelectable="true"
             android:textSize="12sp" />
 

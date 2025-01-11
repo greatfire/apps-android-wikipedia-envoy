@@ -110,6 +110,7 @@ room-testing = { module = "androidx.room:room-testing", version.ref = "roomVersi
 swiperefreshlayout = { module = "androidx.swiperefreshlayout:swiperefreshlayout", version.ref = "swiperefreshlayout" }
 viewpager2 = { module = "androidx.viewpager2:viewpager2", version.ref = "viewpager2" }
 work-runtime-ktx = { module = "androidx.work:work-runtime-ktx", version.ref = "workRuntimeKtx" }
+gf-envoy = { module = "org.greatfire:IEnvoyProxy", version.ref = "gfEnvoyVersion" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "gradle" }
@@ -117,6 +118,5 @@ gms-plugin = { id = 'com.google.gms.google-services', version.ref = "googleServi
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlinStdlibJdk8" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlinStdlibJdk8" }
 ksp-plugin = { id = 'com.google.devtools.ksp', version.ref = "kspPlugin" }
-gf-envoy = { id = "org.greatfire:IEnvoyProxy", version.ref = "" }
-klaxit-secrets = { id = "com.klaxit.hiddensecrets:HiddenSecretsPlugin", version.ref = "" }
+klaxit-secrets = { id = 'com.klaxit.hiddensecrets', version.ref = "klaxitSecretsVersion" }
 

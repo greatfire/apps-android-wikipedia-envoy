@@ -438,7 +438,6 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
             this@MainActivity,
             listOfUrls,
             DIRECT_URL,
-            Secrets().gethystCert(shortPackage),
             urlSources,
             urlInterval,
             urlStart,

@@ -25,6 +25,7 @@ import org.wikipedia.auth.AccountUtil
 import org.wikipedia.databinding.ActivityMainBinding
 import org.wikipedia.dataclient.WikiSite
 import org.wikipedia.donate.DonorStatus
+import org.wikipedia.events.EventHandler
 import org.wikipedia.feed.FeedFragment
 import org.wikipedia.navtab.NavTab
 import org.wikipedia.onboarding.InitialOnboardingActivity
@@ -43,7 +44,6 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
     private val DIRECT_URL = arrayListOf<String>("https://www.wikipedia.org/")
 
     // event logging
-    /*
     private var eventHandler: EventHandler? = null
     private val EVENT_TAG_SELECT = "SELECTED_URL"
     private val EVENT_PARAM_SELECT_URL = "selected_url_value"
@@ -70,7 +70,6 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
     private val EVENT_PARAM_VALIDATION_SECONDS = "validation_time_seconds"
     private val EVENT_TAG_VALIDATION_ENDED = "VALIDATION_ENDED"
     private val EVENT_PARAM_VALIDATION_ENDED_CAUSE = "validation_ended_cause"
-    */
 
     private lateinit var binding: ActivityMainBinding
 
@@ -148,10 +147,10 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
                             //eventHandler?.logEvent(EVENT_TAG_VALIDATION_TIME, bundle)
                         }
 
-                        //val bundle = Bundle()
-                        //bundle.putString(EVENT_PARAM_SELECT_URL, sanitizedUrl)
-                        //bundle.putString(EVENT_PARAM_SELECT_SERVICE, validService)
-                        //eventHandler?.logEvent(EVENT_TAG_SELECT, bundle)
+                        val bundle = Bundle()
+                        bundle.putString(EVENT_PARAM_SELECT_URL, sanitizedUrl)
+                        bundle.putString(EVENT_PARAM_SELECT_SERVICE, validService)
+                        eventHandler?.logEvent(EVENT_TAG_SELECT, bundle)
 
                         if (DIRECT_URL.contains(validUrl)) {
 
@@ -173,10 +172,10 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
                         }
                     } else {
 
-                        //val bundle = Bundle()
-                        //bundle.putString(EVENT_PARAM_VALID_URL, sanitizedUrl)
-                        //bundle.putString(EVENT_PARAM_VALID_SERVICE, validService)
-                        //eventHandler?.logEvent(EVENT_TAG_VALID, bundle)
+                        val bundle = Bundle()
+                        bundle.putString(EVENT_PARAM_VALID_URL, sanitizedUrl)
+                        bundle.putString(EVENT_PARAM_VALID_SERVICE, validService)
+                        eventHandler?.logEvent(EVENT_TAG_VALID, bundle)
 
                         Log.d(TAG, "already received a valid url, ignore additional valid url: " + sanitizedUrl)
                     }
@@ -198,10 +197,10 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
                         Log.e(TAG, "received an invalid url that was empty or null")
                     } else {
 
-                        //val bundle = Bundle()
-                        //bundle.putString(EVENT_PARAM_INVALID_URL, sanitizedUrl)
-                        //bundle.putString(EVENT_PARAM_INVALID_SERVICE, invalidService)
-                        //eventHandler?.logEvent(EVENT_TAG_INVALID, bundle)
+                        val bundle = Bundle()
+                        bundle.putString(EVENT_PARAM_INVALID_URL, sanitizedUrl)
+                        bundle.putString(EVENT_PARAM_INVALID_SERVICE, invalidService)
+                        eventHandler?.logEvent(EVENT_TAG_INVALID, bundle)
 
                         Log.d(TAG, "received an invalid url: " + sanitizedUrl)
                     }
@@ -452,12 +451,15 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
         envoyUnused = false
 
         // firebase logging
-        //if (Prefs.isFirebaseLoggingEnabled) {
-        //    eventHandler = EventHandler(applicationContext)
-        //} else {
-        //    Log.d("ENVOY_LOG", "firebase logging off, don't initialize firebase")
-        //    eventHandler = null
-        //}
+        // if (Prefs.isFirebaseLoggingEnabled) {
+        // TEMP
+        if (true) {
+            Log.d("ENVOY_LOG", "firebase logging on, initialize firebase")
+            eventHandler = EventHandler(applicationContext)
+        } else {
+            Log.d("ENVOY_LOG", "firebase logging off, don't initialize firebase")
+            eventHandler = null
+        }
 
         setImageZoomHelper()
         if (Prefs.isInitialOnboardingEnabled && savedInstanceState == null &&
@@ -523,9 +525,19 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
 
     override fun onStop() {
         super.onStop()
+        Log.d(TAG, "onStop called, do not stop receiver")
 
         // moved to start/stop to avoid an issue with registering multiple instances of the receiver when app is swiped away
-        Log.d(TAG, "stop/unregister broadcast receiver")
+        // Log.d(TAG, "stop/unregister broadcast receiver")
+        // unregister receiver for test results
+        // LocalBroadcastManager.getInstance(this).unregisterReceiver(mBroadcastReceiver)
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+
+        // moved to destroy to avoid an issue where onStop was called unexpectedly during startup
+        Log.d(TAG, "destroy/unregister broadcast receiver")
         // unregister receiver for test results
         LocalBroadcastManager.getInstance(this).unregisterReceiver(mBroadcastReceiver)
     }

@@ -92,7 +92,7 @@
     </style>
 
     <style name="AppTheme.Splash">
-        <item name="android:windowBackground">@drawable/splash_bg</item>
+        <item name="android:windowBackground">@color/white</item>
         <item name="android:navigationBarColor">@color/gray700</item>
     </style>
 

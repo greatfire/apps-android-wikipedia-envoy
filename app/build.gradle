@@ -250,6 +250,22 @@ dependencies {
     fdroidImplementation libs.com.google.firebase.firebase.messaging.ktx3
     greatfireImplementation libs.com.google.firebase.firebase.messaging.ktx3
 
+    // For firebase analytics
+    prodImplementation platform(libs.com.google.firebase.firebase.bom)
+    prodImplementation libs.com.google.firebase.firebase.analytics.ktx
+    betaImplementation platform(libs.com.google.firebase.firebase.bom)
+    betaImplementation libs.com.google.firebase.firebase.analytics.ktx
+    alphaImplementation platform(libs.com.google.firebase.firebase.bom)
+    alphaImplementation libs.com.google.firebase.firebase.analytics.ktx
+    devImplementation platform(libs.com.google.firebase.firebase.bom)
+    devImplementation libs.com.google.firebase.firebase.analytics.ktx
+    customImplementation platform(libs.com.google.firebase.firebase.bom)
+    customImplementation libs.com.google.firebase.firebase.analytics.ktx
+    fdroidImplementation platform(libs.com.google.firebase.firebase.bom)
+    fdroidImplementation libs.com.google.firebase.firebase.analytics.ktx
+    greatfireImplementation platform(libs.com.google.firebase.firebase.bom)
+    greatfireImplementation libs.com.google.firebase.firebase.analytics.ktx
+
     // For integrating with Google Pay for donations
     prodImplementation libs.com.google.android.gms.play.services.wallet2
     betaImplementation libs.com.google.android.gms.play.services.wallet2

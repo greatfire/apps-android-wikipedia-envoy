@@ -18,11 +18,3 @@ add_library( # Specifies the name of the library.
 
              # Provides a relative path to your source file(s).
              secrets.cpp )
-
-# On different build machines different NDK paths and different paths
-# to the project (and thus to its jni directory) are used. This leads
-# to different paths to the source files in debug symbols, causing
-# linker to generate different build-id, which is preserved after
-# stripping.
-
-target_link_libraries(secrets -Wl,--build-id=none)

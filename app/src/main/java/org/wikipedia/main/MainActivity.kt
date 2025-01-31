@@ -43,6 +43,8 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
 
     private val DIRECT_URL = arrayListOf<String>("https://www.wikipedia.org/")
 
+    private var urlCount = 0
+
     // event logging
     private var eventHandler: EventHandler? = null
     private val EVENT_TAG_SELECT = "SELECTED_URL"
@@ -179,6 +181,9 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
 
                         Log.d(TAG, "already received a valid url, ignore additional valid url: " + sanitizedUrl)
                     }
+
+                    updateReceiverStatus()
+
                 } else if (intent.action == ENVOY_BROADCAST_VALIDATION_FAILED) {
                     val invalidUrl = intent.getStringExtra(ENVOY_DATA_URL_FAILED) ?: ""
                     var invalidService = intent.getStringExtra(ENVOY_DATA_SERVICE_FAILED) ?: ""
@@ -204,6 +209,9 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
 
                         Log.d(TAG, "received an invalid url: " + sanitizedUrl)
                     }
+
+                    updateReceiverStatus()
+
                 } else if (intent.action == ENVOY_BROADCAST_BATCH_SUCCEEDED) {
                     val urlBatch = intent.getStringArrayListExtra(ENVOY_DATA_URL_LIST)
                     val serviceBatch = intent.getStringArrayListExtra(ENVOY_DATA_SERVICE_LIST)
@@ -368,6 +376,16 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
         }
     }
 
+    fun updateReceiverStatus() {
+        urlCount--
+        if (urlCount > 0) {
+            Log.d(TAG, "" + urlCount + " urls remaining")
+        } else {
+            Log.d(TAG, "validation complete, unregister receiver")
+            LocalBroadcastManager.getInstance(this).unregisterReceiver(mBroadcastReceiver)
+        }
+    }
+
     override fun inflateAndSetContentView() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
@@ -432,6 +450,8 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
             Log.d(TAG, "found default proxy urls")
             listOfUrls.addAll(Secrets().getdefProxy(shortPackage).split(","))
         }
+
+        urlCount = DIRECT_URL.size + listOfUrls.size
 
         NetworkIntentService.submit(
             this@MainActivity,
@@ -537,7 +557,7 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
         super.onDestroy()
 
         // moved to destroy to avoid an issue where onStop was called unexpectedly during startup
-        Log.d(TAG, "destroy/unregister broadcast receiver")
+        Log.d(TAG, "onDestroy called, unregister broadcast receiver")
         // unregister receiver for test results
         LocalBroadcastManager.getInstance(this).unregisterReceiver(mBroadcastReceiver)
     }

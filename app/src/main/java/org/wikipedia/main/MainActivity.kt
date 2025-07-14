@@ -11,10 +11,11 @@ import androidx.appcompat.view.ActionMode
 import androidx.appcompat.widget.Toolbar
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
-import androidx.localbroadcastmanager.content.LocalBroadcastManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import org.greatfire.envoy.*
 import org.greatfire.wikiunblocked.Secrets
-import org.wikipedia.BuildConfig
 import org.wikipedia.Constants
 import org.wikipedia.R
 import org.wikipedia.activity.SingleFragmentActivity
@@ -38,9 +39,9 @@ import org.wikipedia.views.DonorBadgeView
 
 class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callback {
 
-    private val TAG = "MainActivity"
-
-    private val DIRECT_URL = arrayListOf<String>("https://www.wikipedia.org/")
+    init {
+        instance = this
+    }
 
     // event logging
     /*
@@ -54,12 +55,6 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
     private val EVENT_TAG_INVALID = "INVALID_URL"
     private val EVENT_PARAM_INVALID_URL = "invalid_url_value"
     private val EVENT_PARAM_INVALID_SERVICE = "invalid_url_service"
-    private val EVENT_TAG_VALID_BATCH = "VALID_BATCH"
-    private val EVENT_PARAM_VALID_URLS = "valid_batch_urls"
-    private val EVENT_PARAM_VALID_SERVICES = "valid_batch_services"
-    private val EVENT_TAG_INVALID_BATCH = "INVALID_BATCH"
-    private val EVENT_PARAM_INVALID_URLS = "invalid_batch_urls"
-    private val EVENT_PARAM_INVALID_SERVICES = "invalid_batch_services"
     private val EVENT_TAG_UPDATE_SUCCEEDED = "UPDATE_SUCCEEDED"
     private val EVENT_PARAM_UPDATE_SUCCEEDED_URL = "update_succeeded_url"
     private val EVENT_PARAM_UPDATE_SUCCEEDED_COUNT = "update_succeeded_count"
@@ -82,32 +77,98 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
         }
     }
 
-    private var waitingForEnvoy = false
-    private var envoyUnused = false
+    private val mCallback = WikiCallback()
 
-    private val validServices = mutableListOf<String>()
-    private val invalidServices = mutableListOf<String>()
-    private val updateMessages = mutableListOf<String>()
+    class WikiCallback: EnvoyTestCallback {
 
-    private var retryDialog: AlertDialog? = null
-    private val retryListener: DialogInterface.OnClickListener = object : DialogInterface.OnClickListener {
-        override fun onClick(p0: DialogInterface?, p1: Int) {
-            Log.d(TAG, "retry envoy from dialog")
-            checkAndInitEnvoy()
-            retryDialog?.cancel()
-            retryDialog = null
+        val mainScope = CoroutineScope(Dispatchers.Main)
+
+        // TODO: restore analytics logging
+
+        override fun reportTestSuccess(testedUrl: String, testedService: String, time: Long) {
+            val sanitizedUrl = UrlUtil.sanitizeUrl(testedUrl, testedService)
+            Log.d(TAG, "URL: $sanitizedUrl VALID! TIME: $time ms")
+
+            // populate debug menu
+            if (BuildConfig.BUILD_TYPE == "debug" && !testedService.isNullOrEmpty()) {
+                validServices.add(testedService + " - " + sanitizedUrl)
+                Prefs.validServices = validServices
+            }
+
+            if (EnvoyTransportType.DIRECT.name.equals(testedService)) {
+                Log.d(TAG, "DIRECT CONNECTION SUCCESSFUL")
+                // set flag so resuming activity doesn't trigger another envoy check
+                envoyUnused = true
+            } else {
+                mainScope.launch {
+                    if (waitingForEnvoy) {
+                        Log.d(TAG, "FIRST VALID URL, REFRESH UI")
+                        // when the first valid url is received, refresh ui
+                        waitingForEnvoy = false
+
+                        val fragment = mainActivityFragment()
+                        if (fragment is MainFragment) {
+                            Log.d(TAG, "REFRESH MAIN FRAGMENT")
+                            fragment.refreshFragment()
+                        } else {
+                            Log.d(TAG, "UNEXPECTED FRAGMENT CLASS")
+                        }
+                    } else {
+                        Log.d(TAG, "EXTRA VALID URL, IGNORE")
+                    }
+                }
+            }
+        }
+
+        override fun reportTestFailure(testedUrl: String, testedService: String, time: Long) {
+            val sanitizedUrl = UrlUtil.sanitizeUrl(testedUrl, testedService)
+            Log.d(TAG, "URL: $sanitizedUrl INVALID! TIME: $time ms")
+
+            // populate debug menu
+            if (BuildConfig.BUILD_TYPE == "debug" && !testedService.isNullOrEmpty()) {
+                invalidServices.add(testedService + " - " + sanitizedUrl)
+                Prefs.invalidServices = invalidServices
+            }
+        }
+
+        override fun reportTestBlocked(testedUrl: String, testedService: String) {
+            val sanitizedUrl = UrlUtil.sanitizeUrl(testedUrl, testedService)
+            Log.e(TAG, "URL: $sanitizedUrl BLOCKED! (RETRY LATER)")
+
+            // populate debug menu (add to invalid list)
+            if (BuildConfig.BUILD_TYPE == "debug" && !testedService.isNullOrEmpty()) {
+                invalidServices.add(testedService + " - " + sanitizedUrl)
+                Prefs.invalidServices = invalidServices
+            }
+        }
+
+        override fun reportOverallStatus(status: String, time: Long) {
+            Log.d(TAG, "FINISHED! TIME: $time ms")
+            Log.d(TAG, "STATUS: $status")
+            if (EnvoyTestStatus.BLOCKED.name.equals(status) && !envoyUnused) {
+                // all urls blocked due to previous failures, show dialog advising to
+                // retry later, but ignore if direct connection was successful
+                Log.w(TAG, "envoy failed, but all urls were blocked")
+                mainScope.launch {
+                    showFailureDialog()
+                }
+            } else if (EnvoyTestStatus.TIMEOUT.name.equals(status) && !envoyUnused) {
+                // setup failed but not all urls were tested, show dialog with retry
+                // prompt, but ignore if direct connection was successful
+                Log.w(TAG, "envoy failed, but not all urls were tested")
+                mainScope.launch {
+                    showRetryDialog()
+                }
+            } else {
+                // NO-OP?
+            }
         }
     }
-    private val cancelListener: DialogInterface.OnClickListener = object : DialogInterface.OnClickListener {
-        override fun onClick(p0: DialogInterface?, p1: Int) {
-            Log.d(TAG, "cancel dialog")
-            retryDialog?.cancel()
-            retryDialog = null
-        }
-    }
 
+    // TODO - remove after all relevant functionality is restored
     // this receiver should be triggered by a success or failure broadcast from the
     // NetworkIntentService (indicating whether submitted urls were valid or invalid)
+    /*
     private val mBroadcastReceiver: BroadcastReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent != null && context != null) {
@@ -368,81 +429,11 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
             }
         }
     }
+    */
 
     override fun inflateAndSetContentView() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
-    }
-
-    fun envoyInit() {
-
-        val listOfUrls = mutableListOf<String>()
-
-        if (BuildConfig.BUILD_TYPE == "debug") {
-            validServices.clear()
-            Prefs.validServices = validServices
-            invalidServices.clear()
-            Prefs.invalidServices = invalidServices
-            updateMessages.clear()
-            Prefs.updateMessages = updateMessages
-        }
-
-        // secrets don't support fdroid package name
-        val shortPackage = packageName.removeSuffix(".fdroid")
-
-        val urlSources = mutableListOf<String>()
-        if (Secrets().geturlSources(shortPackage).isNullOrEmpty()) {
-            Log.w(TAG, "no url sources have been provided")
-        } else {
-            Log.d(TAG, "found url sources")
-            urlSources.addAll(Secrets().geturlSources(shortPackage).split(","))
-        }
-
-        var urlInterval = 1
-        if (Secrets().geturlInterval(shortPackage).isNullOrEmpty()) {
-            Log.w(TAG, "no url interval has been provided")
-        } else {
-            Log.d(TAG, "found url interval")
-            urlInterval = Secrets().geturlInterval(shortPackage).toInt()
-        }
-
-        var urlStart = 1
-        if (Secrets().geturlStart(shortPackage).isNullOrEmpty()) {
-            Log.w(TAG, "no url starting index has been provided")
-        } else {
-            Log.d(TAG, "found url starting index")
-            urlStart = Secrets().geturlStart(shortPackage).toInt()
-        }
-
-        var urlEnd = 1
-        if (Secrets().geturlEnd(shortPackage).isNullOrEmpty()) {
-            Log.w(TAG, "no url ending index has been provided")
-        } else {
-            Log.d(TAG, "found url ending index")
-            urlEnd = Secrets().geturlEnd(shortPackage).toInt()
-        }
-
-        if (Secrets().getdefProxy(shortPackage).isNullOrEmpty()) {
-            if (urlSources.isNullOrEmpty()) {
-                Log.w(TAG, "no default proxy urls found and no url sources found, cannot proceed")
-                return
-            } else {
-                Log.w(TAG, "no default proxy urls found, submit empty list to check sources for urls")
-            }
-        } else {
-            Log.d(TAG, "found default proxy urls")
-            listOfUrls.addAll(Secrets().getdefProxy(shortPackage).split(","))
-        }
-
-        NetworkIntentService.submit(
-            this@MainActivity,
-            listOfUrls,
-            DIRECT_URL,
-            urlSources,
-            urlInterval,
-            urlStart,
-            urlEnd
-        )
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -475,69 +466,69 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
         }
     }
 
-    override fun onStart() {
-        super.onStart()
-
-        // moved to start/stop to avoid an issue with registering multiple instances of the receiver when app is swiped away
-        Log.d(TAG, "start/register broadcast receiver")
-        // register to receive test results
-        LocalBroadcastManager.getInstance(this).registerReceiver(mBroadcastReceiver, IntentFilter().apply {
-            addAction(ENVOY_BROADCAST_VALIDATION_SUCCEEDED)
-            addAction(ENVOY_BROADCAST_VALIDATION_FAILED)
-            addAction(ENVOY_BROADCAST_BATCH_SUCCEEDED)
-            addAction(ENVOY_BROADCAST_BATCH_FAILED)
-            addAction(ENVOY_BROADCAST_UPDATE_SUCCEEDED)
-            addAction(ENVOY_BROADCAST_UPDATE_FAILED)
-            addAction(ENVOY_BROADCAST_VALIDATION_CONTINUED)
-            addAction(ENVOY_BROADCAST_VALIDATION_ENDED)
-        })
-    }
-
     override fun onResume() {
         super.onResume()
 
         // start cronet here to prevent exception from starting a service when out of focus
         checkAndInitEnvoy()
-
-        invalidateOptionsMenu()
     }
 
-    private fun checkAndInitEnvoy() {
+    fun checkAndInitEnvoy() {
 
-        Log.d(TAG, "Starting Envoy")
-        with(EnvoyNetworking) {
-            setTestUrl("https://www.wikipedia.org/", 200)
-            setDirectUrl("https://www.wikipedia.org/")
-            addEnvoyUrl("https://CHANGE ME BACK/wikipedia/")
-            addEnvoyUrl("hysteria2://BLAH BLAH/")
-            connect()
+        // TODO: onCreate also checks the following before onboarding, is that necessary here?
+        // savedInstanceState == null && !intent.hasExtra(Constants.INTENT_EXTRA_IMPORT_READING_LISTS
+        if (Prefs.isInitialOnboardingEnabled) {
+            Log.d(TAG, "user is likely doing onboarding, don't try to start envoy")
+            return
+        } else if (waitingForEnvoy) {
+            Log.d(TAG, "already processing urls, don't try to start envoy again")
+            return
+        } else if (envoyUnused) {
+            Log.d(TAG, "direct connection previously worked, don't try to start envoy")
+            return
+        } else if (validServices.isNotEmpty()) {
+            // TODO: is there a way to check if an envoy service is running?
+            Log.d(TAG, "vaid url already found, don't try to start envoy")
+            return
+        } else {
+            Log.d(TAG, "starting envoy")
+            waitingForEnvoy = true
         }
-        
-//        if (Prefs.isInitialOnboardingEnabled) {
-//            // TODO: onCreate also checks the following before onboarding, is that necessary here?
-//            // savedInstanceState == null && !intent.hasExtra(Constants.INTENT_EXTRA_IMPORT_READING_LISTS
-//            Log.d(TAG, "user is likely doing onboarding, don't try to start envoy")
-//        } else if (envoyUnused) {
-//            Log.d(TAG, "direct connection previously worked, don't try to start envoy")
-//        } else if (CronetNetworking.cronetEngine() != null) {
-//            Log.d(TAG, "cronet already running, don't try to start envoy again")
-//        } else if (waitingForEnvoy) {
-//            Log.d(TAG, "already processing urls, don't try to start envoy again")
-//        } else {
-//            // run envoy setup (fetches and validate urls)
-//            Log.d(TAG, "start envoy to process urls")
-//            waitingForEnvoy = true
-//            envoyInit()
-//        }
-    }
 
-    override fun onStop() {
-        super.onStop()
+        // clear debug ui
+        if (BuildConfig.BUILD_TYPE == "debug") {
+            validServices.clear()
+            Prefs.validServices = validServices
+            invalidServices.clear()
+            Prefs.invalidServices = invalidServices
+            updateMessages.clear()
+            Prefs.updateMessages = updateMessages
+        }
+        invalidateOptionsMenu()
 
-        // moved to start/stop to avoid an issue with registering multiple instances of the receiver when app is swiped away
-        Log.d(TAG, "stop/unregister broadcast receiver")
-        // unregister receiver for test results
-        LocalBroadcastManager.getInstance(this).unregisterReceiver(mBroadcastReceiver)
+        // secrets don't support fdroid package name
+        val shortPackage = packageName.removeSuffix(".fdroid")
+
+        Log.d(TAG, "GET SECRETS: " + shortPackage)
+
+        val urlString: String = Secrets().getdefProxy(shortPackage)
+        val testUrls: List<String> = urlString.split(",")
+
+        val envoy: EnvoyNetworking = EnvoyNetworking()
+
+        envoy.setContext(mainActivityAppContext())
+
+        // skip direct for now
+        // envoy.addEnvoyUrl(WIKI_URL)
+        testUrls.forEach{
+            envoy.addEnvoyUrl(it)
+        }
+
+        envoy.setPassiveTest(false)
+        envoy.setCallback(mCallback)
+        envoy.connect()
+
+        Log.d(TAG, "ENVOY TESTING STARTED...")
     }
 
     override fun createFragment(): MainFragment {
@@ -662,6 +653,75 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
     }
 
     companion object {
+
+        private const val TAG = "MainActivity"
+
+        private const val WIKI_URL = "https://www.wikipedia.org/";
+
+        // state/ui parameters moved here to allow access from callback
+
+        private var waitingForEnvoy = false
+        private var envoyUnused = false
+
+        private val validServices = mutableListOf<String>()
+        private val invalidServices = mutableListOf<String>()
+        private val updateMessages = mutableListOf<String>()
+
+        private var currentDialog: AlertDialog? = null
+
+        private var instance: MainActivity? = null
+
+        private val retryListener: DialogInterface.OnClickListener = object : DialogInterface.OnClickListener {
+            override fun onClick(p0: DialogInterface?, p1: Int) {
+                Log.d(TAG, "retry envoy from dialog")
+                instance!!.checkAndInitEnvoy()
+                currentDialog?.cancel()
+                currentDialog = null
+            }
+        }
+        private val cancelListener: DialogInterface.OnClickListener = object : DialogInterface.OnClickListener {
+            override fun onClick(p0: DialogInterface?, p1: Int) {
+                Log.d(TAG, "cancel dialog")
+                currentDialog?.cancel()
+                currentDialog = null
+            }
+        }
+
+        fun showFailureDialog() {
+            if (currentDialog != null) {
+                Log.w(TAG, "dialog already awaiting response")
+            } else {
+                currentDialog = AlertDialog.Builder(instance!!)
+                    .setTitle(R.string.failure_dialog_title)
+                    .setMessage(R.string.failure_dialog_content)
+                    .setNegativeButton(R.string.failure_dialog_button_close, cancelListener)
+                    .create()
+                currentDialog?.show()
+            }
+        }
+
+        fun showRetryDialog() {
+            if (currentDialog != null) {
+                Log.w(TAG, "dialog already awaiting response")
+            } else {
+                currentDialog = AlertDialog.Builder(instance!!)
+                    .setTitle(R.string.retry_dialog_title)
+                    .setMessage(R.string.retry_dialog_content)
+                    .setPositiveButton(R.string.retry_dialog_button_retry, retryListener)
+                    .setNegativeButton(R.string.retry_dialog_button_close, cancelListener)
+                    .create()
+                currentDialog?.show()
+            }
+        }
+
+        fun mainActivityAppContext() : Context {
+            return instance!!.applicationContext
+        }
+
+        fun mainActivityFragment(): Fragment {
+            return instance!!.fragment
+        }
+
         fun newIntent(context: Context): Intent {
             return Intent(context, MainActivity::class.java)
         }

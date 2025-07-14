@@ -288,14 +288,18 @@ dependencies {
     androidTestImplementation libs.room.testing
     androidTestUtil libs.androidx.orchestrator
 
+    // transitive dependencies can be specified in a pom file when an
+    // aar is published to maven but otherwise must be included here
+    implementation 'com.google.protobuf:protobuf-javalite:4.31.1'
+    implementation 'tech.relaycorp:doh:1.0.70'
+
     // switch to local files if needed to support development
-    // implementation files('libs/cronet-debug.aar')
+    implementation files('libs/cronet-debug.aar')
     implementation files('libs/envoy-debug.aar')
-    // implementation files('libs/IEnvoyProxy.aar')
-    implementation files('libs/plenipotentiary.aar')
+    implementation files('libs/IEnvoyProxy.aar')
     // use maven dependencies to support automation
-    implementation 'org.greatfire.envoy:cronet:108.0.5359.195'
-    //implementation 'org.greatfire:envoy:107.0.5304.150.5'
+    // implementation 'org.greatfire.envoy:cronet:108.0.5359.195'
+    // implementation 'org.greatfire:envoy:107.0.5304.150.5'
     // implementation 'org.greatfire:IEnvoyProxy:1.5.0'
 }
 

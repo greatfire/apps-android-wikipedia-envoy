@@ -41,7 +41,6 @@ object OkHttpConnectionFactory {
             .addInterceptor(HttpLoggingInterceptor().setLevel(Prefs.retrofitLogLevel))
             // this interceptor will be bypassed if no valid proxy urls were found at startup
             // the app will connect to the internet directly if possible
-//            .addInterceptor(CronetInterceptor())
             .addInterceptor(EnvoyInterceptor())
 
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {

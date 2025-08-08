@@ -11,13 +11,13 @@ cmake_minimum_required(VERSION 3.4.1)
 # automatically packages shared libraries with your APK.
 
 add_library( # Specifies the name of the library.
-             secrets
+        secrets
 
-             # Sets the library as a shared library.
-             SHARED
+        # Sets the library as a shared library.
+        SHARED
 
-             # Provides a relative path to your source file(s).
-             secrets.cpp )
+        # Provides a relative path to your source file(s).
+        secrets.cpp )
 
 # On different build machines different NDK paths and different paths
 # to the project (and thus to its jni directory) are used. This leads
@@ -26,3 +26,5 @@ add_library( # Specifies the name of the library.
 # stripping.
 
 target_link_libraries(secrets -Wl,--build-id=none)
+
+target_link_options(secrets PRIVATE "-Wl,-z,max-page-size=16384")

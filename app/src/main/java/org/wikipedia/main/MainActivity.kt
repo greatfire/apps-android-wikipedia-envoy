@@ -86,7 +86,7 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
         // TODO: restore analytics logging
 
         override fun reportTestSuccess(testedUrl: String, testedService: String, time: Long) {
-            val sanitizedUrl = UrlUtil.sanitizeUrl(testedUrl, testedService)
+            val sanitizedUrl = UrlUtil.sanitizeUrl(testedUrl)
             Log.d(TAG, "URL: $sanitizedUrl VALID! TIME: $time ms")
 
             // populate debug menu
@@ -121,7 +121,7 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
         }
 
         override fun reportTestFailure(testedUrl: String, testedService: String, time: Long) {
-            val sanitizedUrl = UrlUtil.sanitizeUrl(testedUrl, testedService)
+            val sanitizedUrl = UrlUtil.sanitizeUrl(testedUrl)
             Log.d(TAG, "URL: $sanitizedUrl INVALID! TIME: $time ms")
 
             // populate debug menu
@@ -132,7 +132,7 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
         }
 
         override fun reportTestBlocked(testedUrl: String, testedService: String) {
-            val sanitizedUrl = UrlUtil.sanitizeUrl(testedUrl, testedService)
+            val sanitizedUrl = UrlUtil.sanitizeUrl(testedUrl)
             Log.e(TAG, "URL: $sanitizedUrl BLOCKED! (RETRY LATER)")
 
             // populate debug menu (add to invalid list)
@@ -524,7 +524,6 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
             envoy.addEnvoyUrl(it)
         }
 
-        envoy.setPassiveTest(false)
         envoy.setCallback(mCallback)
         envoy.connect()
 

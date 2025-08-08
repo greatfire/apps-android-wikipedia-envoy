@@ -44,7 +44,7 @@ android {
 
     defaultConfig {
         applicationId 'org.greatfire.wikiunblocked'
-        minSdk 21
+        minSdk 26
         targetSdk 35
         versionName "5.0"
         versionCode 100500
@@ -292,6 +292,13 @@ dependencies {
     // aar is published to maven but otherwise must be included here
     implementation 'com.google.protobuf:protobuf-javalite:4.31.1'
     implementation 'tech.relaycorp:doh:1.0.70'
+
+    // OHTTP
+    // https://github.com/flohealth/ok-ohttp-plugin
+    // these aren't in Maven?
+    implementation files('libs/lib-ohttp-plugin-release.aar')
+    implementation files('libs/ok-ohttp-encapsulator-release.aar')
+    implementation files('libs/lib-bhttp.jar')
 
     // switch to local files if needed to support development
     implementation files('libs/cronet-debug.aar')

@@ -85,6 +85,10 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
 
         // TODO: restore analytics logging
 
+        override fun reportTestStarted(testedUrl: String, testedService: String) {
+            // NO-OP
+        }
+
         override fun reportTestSuccess(testedUrl: String, testedService: String, time: Long) {
             val sanitizedUrl = UrlUtil.sanitizeUrl(testedUrl)
             Log.d(TAG, "URL: $sanitizedUrl VALID! TIME: $time ms")
@@ -514,11 +518,13 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
         val urlString: String = Secrets().getdefProxy(shortPackage)
         val testUrls: List<String> = urlString.split(",")
 
+        // disable passive testing by setting static flag
+        EnvoyNetworking.passivelyTestDirect = false
         val envoy: EnvoyNetworking = EnvoyNetworking()
 
         envoy.setContext(mainActivityAppContext())
 
-        // skip direct for now
+        // skip direct testing for now
         // envoy.addEnvoyUrl(WIKI_URL)
         testUrls.forEach{
             envoy.addEnvoyUrl(it)

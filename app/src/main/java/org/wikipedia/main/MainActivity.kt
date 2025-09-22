@@ -85,9 +85,9 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
 
         // TODO: restore analytics logging
 
-        override fun reportTestStarted(testedUrl: String, testedService: String) {
-            // NO-OP
-        }
+//        override fun reportTestStarted(testedUrl: String, testedService: String) {
+//            // NO-OP
+//        }
 
         override fun reportTestSuccess(testedUrl: String, testedService: String, time: Long) {
             val sanitizedUrl = UrlUtil.sanitizeUrl(testedUrl)
@@ -516,6 +516,7 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
         Log.d(TAG, "GET SECRETS: " + shortPackage)
 
         val urlString: String = Secrets().getdefProxy(shortPackage)
+        Log.d("EnvoySteve", "urlString: ${urlString}")
         val testUrls: List<String> = urlString.split(",")
 
         // disable passive testing by setting static flag
@@ -526,9 +527,23 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
 
         // skip direct testing for now
         // envoy.addEnvoyUrl(WIKI_URL)
-        testUrls.forEach{
-            envoy.addEnvoyUrl(it)
-        }
+//        testUrls.forEach{
+//            Log.d("EnvoySteve", "⛓️‍💥adding URL: ${it}")
+//            envoy.addEnvoyUrl(it)
+//        }
+        envoy.addEnvoyUrl("https://env.smcdonald.org:8443/")
+
+
+        val privKey = """-----BEGIN PRIVATE KEY-----
+            FAKE/FAKE
+            FAKE=
+            -----END PRIVATE KEY-----
+            """.trimMargin()
+        val pubKey = """-----BEGIN PUBLIC KEY-----
+            FAKE=
+            -----END PUBLIC KEY-----
+            """.trimMargin()
+        envoy.configureConcealedaAuth("envoy", pubKey, privKey);
 
         envoy.setCallback(mCallback)
         envoy.connect()
@@ -667,6 +682,11 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
 
         private var waitingForEnvoy = false
         private var envoyUnused = false
+
+        init {
+            // Envoy static initialization
+            EnvoyNetworking.init()
+        }
 
         private val validServices = mutableListOf<String>()
         private val invalidServices = mutableListOf<String>()

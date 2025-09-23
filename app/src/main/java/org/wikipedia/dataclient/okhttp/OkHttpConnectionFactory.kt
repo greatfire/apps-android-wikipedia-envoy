@@ -6,7 +6,7 @@ import okhttp3.CacheControl
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import okhttp3.tls.HandshakeCertificates
-import org.greatfire.envoy.CronetInterceptor
+import org.greatfire.envoy.EnvoyInterceptor
 import org.wikipedia.R
 import org.wikipedia.WikipediaApp
 import org.wikipedia.dataclient.SharedPreferenceCookieManager
@@ -41,7 +41,7 @@ object OkHttpConnectionFactory {
             .addInterceptor(HttpLoggingInterceptor().setLevel(Prefs.retrofitLogLevel))
             // this interceptor will be bypassed if no valid proxy urls were found at startup
             // the app will connect to the internet directly if possible
-            .addInterceptor(CronetInterceptor())
+            .addInterceptor(EnvoyInterceptor())
 
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
             val certFactory = CertificateFactory.getInstance("X.509")

@@ -1,5 +1,12 @@
 # secrets
 credentials.properties
+app/src/main/cpp/secrets.cpp
+app/src/main/cpp/secrets.hpp
+app/src/main/cpp/sha256.cpp
+app/src/main/cpp/sha256.hpp
+app/src/main/cpp/CMakeLists.txt
+app/src/main/java/org/greatfire/wikiunblocked/Secrets.kt
+app/.cxx
 
 # local libs
 app/libs

@@ -1,23 +1,26 @@
 package org.wikipedia.analytics.eventplatform
 
+import android.app.Activity
 import android.content.Context
+import android.view.MenuItem
 import android.view.View
-import android.widget.CheckBox
+import android.widget.Checkable
 import android.widget.TextView
-import androidx.appcompat.widget.SwitchCompat
+import androidx.fragment.app.Fragment
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import org.wikipedia.Constants
 import org.wikipedia.WikipediaApp
 import org.wikipedia.settings.SettingsActivity
 import org.wikipedia.util.log.L
 
 @Suppress("unused", "CanBeParameter")
 @Serializable
-@SerialName("/analytics/mobile_apps/android_breadcrumbs_event/1.0.0")
+@SerialName("/analytics/mobile_apps/android_breadcrumbs_event/1.1.0")
 class BreadCrumbLogEvent(
         private val screen_name: String,
         private val action: String
-) : MobileAppsEvent(STREAM_NAME) {
+) : MobileAppsEventWithTemp(STREAM_NAME) {
 
     // Do NOT join the declaration and assignment to these fields, or they won't be serialized correctly.
     private val app_primary_language_code: String
@@ -36,11 +39,15 @@ class BreadCrumbLogEvent(
             }
             val viewReadableName = BreadCrumbViewUtil.getReadableNameForView(view)
             val str = "$viewReadableName." + when (view) {
-                is SwitchCompat -> if (!view.isChecked) "on" else "off"
-                is CheckBox -> if (!view.isChecked) "on" else "off"
+                is Checkable -> if (!view.isChecked) "on" else "off"
                 else -> "click"
             }
             EventPlatformClient.submit(BreadCrumbLogEvent(BreadCrumbViewUtil.getReadableScreenName(context), str))
+        }
+
+        fun logClick(context: Context, item: MenuItem) {
+            EventPlatformClient.submit(BreadCrumbLogEvent(BreadCrumbViewUtil.getReadableScreenName(context),
+                context.resources.getResourceEntryName(item.itemId) + ".click"))
         }
 
         fun logLongClick(context: Context, view: View) {
@@ -48,8 +55,10 @@ class BreadCrumbLogEvent(
             EventPlatformClient.submit(BreadCrumbLogEvent(BreadCrumbViewUtil.getReadableScreenName(context), "$viewReadableName.longclick"))
         }
 
-        fun logScreenShown(context: Context) {
-            EventPlatformClient.submit(BreadCrumbLogEvent(BreadCrumbViewUtil.getReadableScreenName(context), "show"))
+        fun logScreenShown(context: Context, fragment: Fragment? = null) {
+            val invokeSource = (fragment?.activity?.intent ?: (context as? Activity)?.intent)?.getSerializableExtra(Constants.INTENT_EXTRA_INVOKE_SOURCE) as? Constants.InvokeSource
+            EventPlatformClient.submit(BreadCrumbLogEvent(BreadCrumbViewUtil.getReadableScreenName(context, fragment),
+                "show" + invokeSource?.let { ".from." + it.value }.orEmpty()))
         }
 
         fun logBackPress(context: Context) {

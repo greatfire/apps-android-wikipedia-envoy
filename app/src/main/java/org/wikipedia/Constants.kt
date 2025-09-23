@@ -8,35 +8,33 @@ object Constants {
     const val ACTIVITY_REQUEST_ADD_A_LANGUAGE = 59
     const val ACTIVITY_REQUEST_BROWSE_TABS = 61
     const val ACTIVITY_REQUEST_DESCRIPTION_EDIT = 55
-    const val ACTIVITY_REQUEST_DESCRIPTION_EDIT_TUTORIAL = 56
     const val ACTIVITY_REQUEST_FEED_CONFIGURE = 58
     const val ACTIVITY_REQUEST_GALLERY = 52
-    const val ACTIVITY_REQUEST_IMAGE_CAPTION_EDIT = 64
-    const val ACTIVITY_REQUEST_IMAGE_TAGS_EDIT = 66
-    const val ACTIVITY_REQUEST_IMAGE_TAGS_ONBOARDING = 65
-    const val ACTIVITY_REQUEST_LANGLINKS = 50
     const val ACTIVITY_REQUEST_LOGIN = 53
     const val ACTIVITY_REQUEST_OPEN_SEARCH_ACTIVITY = 62
     const val ACTIVITY_REQUEST_SETTINGS = 41
     const val ACTIVITY_REQUEST_VOICE_SEARCH = 45
-    const val ACTIVITY_REQUEST_WRITE_EXTERNAL_STORAGE_PERMISSION = 44
 
+    const val ARG_TITLE = "title"
+    const val ARG_WIKISITE = "wikiSite"
+    const val ARG_TEXT = "text"
+    const val ARG_BOOLEAN = "boolean"
     const val INTENT_APP_SHORTCUT_CONTINUE_READING = "appShortcutContinueReading"
     const val INTENT_APP_SHORTCUT_RANDOMIZER = "appShortcutRandomizer"
     const val INTENT_APP_SHORTCUT_SEARCH = "appShortcutSearch"
+    const val INTENT_APP_SHORTCUT_PLACES = "appShortcutPlaces"
     const val INTENT_EXTRA_ACTION = "intentAction"
     const val INTENT_EXTRA_DELETE_READING_LIST = "deleteReadingList"
     const val INTENT_EXTRA_GO_TO_MAIN_TAB = "goToMainTab"
     const val INTENT_EXTRA_GO_TO_SE_TAB = "goToSETab"
     const val INTENT_EXTRA_HAS_TRANSITION_ANIM = "hasTransitionAnim"
     const val INTENT_EXTRA_INVOKE_SOURCE = "invokeSource"
-    const val INTENT_EXTRA_IMPORT_READING_LISTS = "importReadingLists"
+    const val INTENT_EXTRA_PREVIEW_SAVED_READING_LISTS = "previewSavedReadingList"
     const val INTENT_EXTRA_NOTIFICATION_ID = "notificationId"
     const val INTENT_EXTRA_NOTIFICATION_SYNC_CANCEL = "syncCancel"
     const val INTENT_EXTRA_NOTIFICATION_SYNC_PAUSE_RESUME = "syncPauseResume"
     const val INTENT_EXTRA_NOTIFICATION_TYPE = "notificationType"
     const val INTENT_EXTRA_REVERT_QNUMBER = "revertQNumber"
-    const val INTENT_FEATURED_ARTICLE_FROM_WIDGET = "featuredArticleFromWidget"
     const val INTENT_RETURN_TO_MAIN = "returnToMain"
 
     const val MAX_READING_LIST_ARTICLE_LIMIT = 5000
@@ -52,6 +50,8 @@ object Constants {
     const val COMMONS_DB_NAME = "commonswiki"
     const val WIKI_CODE_WIKIDATA = "wikidata"
     const val WIKIDATA_DB_NAME = "wikidatawiki"
+
+    val NON_LANGUAGE_SUBDOMAINS = listOf("donate", "thankyou", "quote", "textbook", "sources", "species", "commons", "meta")
 
     val commonsWikiSite = WikiSite(Service.COMMONS_URL)
     val wikidataWikiSite = WikiSite(Service.WIKIDATA_URL)
@@ -70,10 +70,8 @@ object Constants {
         INTENT_PROCESS_TEXT("intentProcessText"),
         INTENT_SHARE("intentShare"),
         INTENT_UNKNOWN("intentUnknown"),
-        LANG_VARIANT_DIALOG("lang_variant_dialog"),
         LEAD_IMAGE("leadImage"),
         LINK_PREVIEW_MENU("linkPreviewMenu"),
-        MAIN_ACTIVITY("main"),
         MOST_READ_ACTIVITY("mostRead"),
         NAV_MENU("navMenu"),
         NEWS_ACTIVITY("news"),
@@ -89,8 +87,8 @@ object Constants {
         PAGE_EDIT_PENCIL("pageEditPencil"),
         PAGE_EDIT_HIGHLIGHT("pageEditHighlight"),
         PAGE_OVERFLOW_MENU("pageOverflowMenu"),
+        PLACES("places"),
         RANDOM_ACTIVITY("random"),
-        READ_MORE_BOOKMARK_BUTTON("readMoreBookmark"),
         READING_LIST_ACTIVITY("readingList"),
         SEARCH("search"),
         SETTINGS("settings"),
@@ -104,8 +102,13 @@ object Constants {
         TOOLBAR("toolbar"),
         VOICE("voice"),
         WATCHLIST_ACTIVITY("watchlist"),
+        WATCHLIST_FILTER_ACTIVITY("watchlistFilter"),
         WIDGET("widget"),
         USER_CONTRIB_ACTIVITY("userContribActivity"),
+        EDIT_ADD_IMAGE("editAddImage"),
+        SUGGESTED_EDITS_RECENT_EDITS("suggestedEditsRecentEdits"),
+        RABBIT_HOLE_SEARCH("rabbitHoleSearch"),
+        RABBIT_HOLE_READING_LIST("rabbitHoleReadingList")
     }
 
     enum class ImageEditType(name: String) {

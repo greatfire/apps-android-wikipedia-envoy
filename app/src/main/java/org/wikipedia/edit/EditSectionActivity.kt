@@ -2,183 +2,149 @@ package org.wikipedia.edit
 
 import android.content.Context
 import android.content.Intent
-import android.content.res.Configuration
 import android.graphics.Typeface
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.text.TextUtils
 import android.text.TextWatcher
-import android.view.*
+import android.text.method.LinkMovementMethod
+import android.view.ActionMode
+import android.view.Menu
+import android.view.MenuItem
+import android.view.View
+import android.view.WindowManager
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AlertDialog
+import androidx.activity.viewModels
 import androidx.core.app.ActivityCompat
-import androidx.core.net.toUri
 import androidx.core.os.postDelayed
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
 import androidx.core.widget.doAfterTextChanged
-import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers
-import io.reactivex.rxjava3.disposables.CompositeDisposable
-import io.reactivex.rxjava3.schedulers.Schedulers
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import kotlinx.coroutines.CoroutineExceptionHandler
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
 import org.wikipedia.Constants
 import org.wikipedia.R
 import org.wikipedia.WikipediaApp
 import org.wikipedia.activity.BaseActivity
-import org.wikipedia.analytics.EditFunnel
-import org.wikipedia.analytics.LoginFunnel
 import org.wikipedia.analytics.eventplatform.BreadCrumbLogEvent
 import org.wikipedia.analytics.eventplatform.EditAttemptStepEvent
-import org.wikipedia.auth.AccountUtil.isLoggedIn
+import org.wikipedia.analytics.eventplatform.ImageRecommendationsEvent
+import org.wikipedia.auth.AccountUtil
 import org.wikipedia.captcha.CaptchaHandler
 import org.wikipedia.captcha.CaptchaResult
-import org.wikipedia.csrf.CsrfTokenClient
 import org.wikipedia.databinding.ActivityEditSectionBinding
 import org.wikipedia.databinding.DialogWithCheckboxBinding
 import org.wikipedia.databinding.ItemEditActionbarButtonBinding
 import org.wikipedia.dataclient.ServiceFactory
 import org.wikipedia.dataclient.mwapi.MwException
-import org.wikipedia.dataclient.mwapi.MwParseResponse
 import org.wikipedia.dataclient.mwapi.MwServiceError
-import org.wikipedia.dataclient.okhttp.OkHttpConnectionFactory
 import org.wikipedia.edit.insertmedia.InsertMediaActivity
+import org.wikipedia.edit.insertmedia.InsertMediaViewModel
 import org.wikipedia.edit.preview.EditPreviewFragment
 import org.wikipedia.edit.richtext.SyntaxHighlighter
 import org.wikipedia.edit.summaries.EditSummaryFragment
+import org.wikipedia.extensions.parcelableExtra
 import org.wikipedia.history.HistoryEntry
 import org.wikipedia.login.LoginActivity
 import org.wikipedia.notifications.AnonymousNotificationHelper
 import org.wikipedia.page.ExclusiveBottomSheetPresenter
 import org.wikipedia.page.LinkMovementMethodExt
 import org.wikipedia.page.Namespace
+import org.wikipedia.page.PageActivity
 import org.wikipedia.page.PageTitle
 import org.wikipedia.page.linkpreview.LinkPreviewDialog
-import org.wikipedia.search.SearchActivity
 import org.wikipedia.settings.Prefs
 import org.wikipedia.theme.ThemeChooserDialog
-import org.wikipedia.util.*
+import org.wikipedia.util.DeviceUtil
+import org.wikipedia.util.DimenUtil
+import org.wikipedia.util.FeedbackUtil
+import org.wikipedia.util.L10nUtil
+import org.wikipedia.util.Resource
+import org.wikipedia.util.ResourceUtil
+import org.wikipedia.util.StringUtil
+import org.wikipedia.util.UriUtil
 import org.wikipedia.util.log.L
 import org.wikipedia.views.EditNoticesDialog
 import org.wikipedia.views.ViewUtil
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
-class EditSectionActivity : BaseActivity(), ThemeChooserDialog.Callback {
+class EditSectionActivity : BaseActivity(), ThemeChooserDialog.Callback, EditPreviewFragment.Callback, LinkPreviewDialog.LoadPageCallback, LinkPreviewDialog.DismissCallback {
+    private val viewModel: EditSectionViewModel by viewModels()
+
     private lateinit var binding: ActivityEditSectionBinding
-    private lateinit var funnel: EditFunnel
     private lateinit var textWatcher: TextWatcher
     private lateinit var captchaHandler: CaptchaHandler
     private lateinit var editPreviewFragment: EditPreviewFragment
     private lateinit var editSummaryFragment: EditSummaryFragment
     private lateinit var syntaxHighlighter: SyntaxHighlighter
-    lateinit var pageTitle: PageTitle
-        private set
-
-    private var sectionID = -1
-    private var sectionAnchor: String? = null
-    private var textToHighlight: String? = null
-    private var sectionWikitext: String? = null
-    private val editNotices = mutableListOf<String>()
 
     private var sectionTextModified = false
     private var sectionTextFirstLoad = true
-    private var editingAllowed = false
 
-    // Current revision of the article, to be passed back to the server to detect possible edit conflicts.
-    private var currentRevision: Long = 0
-    private val bottomSheetPresenter = ExclusiveBottomSheetPresenter()
     private var actionMode: ActionMode? = null
-    private val disposables = CompositeDisposable()
-
-    private val requestLinkFromSearch = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
-        if (it.resultCode == SearchActivity.RESULT_LINK_SUCCESS) {
-            it.data?.getParcelableExtra<PageTitle>(SearchActivity.EXTRA_RETURN_LINK_TITLE)?.let { title ->
-                binding.editKeyboardOverlay.insertLink(title, pageTitle.wikiSite.languageCode)
-            }
-        }
-    }
 
     private val requestLogin = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         if (it.resultCode == LoginActivity.RESULT_LOGIN_SUCCESS) {
             updateEditLicenseText()
-            funnel.logLoginSuccess()
+            invalidateOptionsMenu()
             FeedbackUtil.showMessage(this, R.string.login_success_toast)
-        } else {
-            funnel.logLoginFailure()
         }
     }
 
     private val requestInsertMedia = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         if (it.resultCode == InsertMediaActivity.RESULT_INSERT_MEDIA_SUCCESS) {
-            it.data?.let { intent ->
-                binding.editSectionText.inputConnection?.commitText("${intent.getStringExtra(InsertMediaActivity.RESULT_WIKITEXT)}", 1)
-            }
-        }
-    }
+            it.data?.let { data ->
 
-    private val editTokenThenSave: Unit
-        get() {
-            cancelCalls()
-            binding.editSectionCaptchaContainer.visibility = View.GONE
-            captchaHandler.hideCaptcha()
-            editSummaryFragment.saveSummary()
-            disposables.add(CsrfTokenClient.getToken(pageTitle.wikiSite)
-                    .subscribeOn(Schedulers.io())
-                    .observeOn(AndroidSchedulers.mainThread())
-                    .subscribe({ doSave(it) }) { showError(it) })
-        }
+                // pass the resulting data into our own current intent, so that we can pass it back
+                // to the InsertImage workflow if the user navigates back to it.
+                val imageTitle = data.parcelableExtra<PageTitle>(InsertMediaActivity.EXTRA_IMAGE_TITLE)
+                val imageCaption = data.getStringExtra(InsertMediaActivity.RESULT_IMAGE_CAPTION)
+                val imageAlt = data.getStringExtra(InsertMediaActivity.RESULT_IMAGE_ALT)
+                val imageSize = data.getStringExtra(InsertMediaActivity.RESULT_IMAGE_SIZE)
+                val imageType = data.getStringExtra(InsertMediaActivity.RESULT_IMAGE_TYPE)
+                val imagePos = data.getStringExtra(InsertMediaActivity.RESULT_IMAGE_POS)
 
-    private val movementMethod = LinkMovementMethodExt { urlStr ->
-        UriUtil.visitInExternalBrowser(this, Uri.parse(UriUtil.resolveProtocolRelativeUrl(pageTitle.wikiSite, urlStr)))
-    }
+                intent.putExtra(InsertMediaActivity.EXTRA_IMAGE_TITLE, imageTitle)
+                intent.putExtra(InsertMediaActivity.RESULT_IMAGE_CAPTION, imageCaption)
+                intent.putExtra(InsertMediaActivity.RESULT_IMAGE_ALT, imageAlt)
+                intent.putExtra(InsertMediaActivity.RESULT_IMAGE_SIZE, imageSize)
+                intent.putExtra(InsertMediaActivity.RESULT_IMAGE_TYPE, imageType)
+                intent.putExtra(InsertMediaActivity.RESULT_IMAGE_POS, imagePos)
 
-    private val syntaxButtonCallback = object : WikiTextKeyboardView.Callback {
-        override fun onPreviewLink(title: String) {
-            val dialog = LinkPreviewDialog.newInstance(HistoryEntry(PageTitle(title, pageTitle.wikiSite), HistoryEntry.SOURCE_INTERNAL_LINK), null)
-            bottomSheetPresenter.show(supportFragmentManager, dialog)
-            binding.root.post {
-                dialog.dialog?.setOnDismissListener {
-                    if (!isDestroyed) {
-                        binding.root.postDelayed({
-                            DeviceUtil.showSoftKeyboard(binding.editSectionText)
-                        }, 200)
-                    }
+                val newWikiText = InsertMediaViewModel.insertImageIntoWikiText(viewModel.pageTitle.wikiSite.languageCode,
+                    viewModel.sectionWikitext.orEmpty(), imageTitle?.text.orEmpty(), imageCaption.orEmpty(),
+                    imageAlt.orEmpty(), imageSize.orEmpty(), imageType.orEmpty(), imagePos.orEmpty(),
+                    if (viewModel.invokeSource == Constants.InvokeSource.EDIT_ADD_IMAGE) 0 else binding.editSectionText.selectionStart,
+                    viewModel.invokeSource == Constants.InvokeSource.EDIT_ADD_IMAGE,
+                    intent.getBooleanExtra(InsertMediaActivity.EXTRA_ATTEMPT_INSERT_INTO_INFOBOX, false))
+
+                binding.editSectionText.setText(newWikiText.first)
+                intent.putExtra(InsertMediaActivity.EXTRA_INSERTED_INTO_INFOBOX, newWikiText.second)
+
+                val insertPos = newWikiText.third
+                binding.editSectionText.setSelection(insertPos.first, insertPos.first + insertPos.second)
+
+                if (viewModel.invokeSource == Constants.InvokeSource.EDIT_ADD_IMAGE) {
+                    // If we came from the Image Recommendation workflow, go directly to Preview.
+                    clickNextButton()
                 }
             }
+        } else if (viewModel.invokeSource == Constants.InvokeSource.EDIT_ADD_IMAGE) {
+            // If the user cancels image insertion, back out immediately.
+            finish()
         }
+    }
 
-        override fun onRequestInsertMedia() {
-            requestInsertMedia.launch(InsertMediaActivity.newIntent(this@EditSectionActivity, pageTitle.displayText))
-        }
-
-        override fun onRequestInsertLink() {
-            requestLinkFromSearch.launch(SearchActivity.newIntent(this@EditSectionActivity, Constants.InvokeSource.EDIT_ACTIVITY, null, true))
-        }
-
-        override fun onRequestHeading() {
-            if (binding.editKeyboardOverlayHeadings.isVisible) {
-                hideAllSyntaxModals()
-                return
-            }
-            hideAllSyntaxModals()
-            binding.editKeyboardOverlayHeadings.isVisible = true
-            binding.editKeyboardOverlay.onAfterHeadingsShown()
-        }
-
-        override fun onRequestFormatting() {
-            if (binding.editKeyboardOverlayFormattingContainer.isVisible) {
-                hideAllSyntaxModals()
-                return
-            }
-            hideAllSyntaxModals()
-            binding.editKeyboardOverlayFormattingContainer.isVisible = true
-            binding.editKeyboardOverlay.onAfterFormattingShown()
-        }
-
-        override fun onSyntaxOverlayCollapse() {
-            hideAllSyntaxModals()
-        }
+    private val movementMethod = LinkMovementMethodExt { urlStr ->
+        UriUtil.visitInExternalBrowser(this, Uri.parse(UriUtil.resolveProtocolRelativeUrl(viewModel.pageTitle.wikiSite, urlStr)))
     }
 
     public override fun onCreate(savedInstanceState: Bundle?) {
@@ -187,33 +153,30 @@ class EditSectionActivity : BaseActivity(), ThemeChooserDialog.Callback {
         setContentView(binding.root)
         setNavigationBarColor(ResourceUtil.getThemedColor(this, android.R.attr.colorBackground))
 
-        pageTitle = intent.getParcelableExtra(EXTRA_TITLE)!!
-        sectionID = intent.getIntExtra(EXTRA_SECTION_ID, -1)
-        sectionAnchor = intent.getStringExtra(EXTRA_SECTION_ANCHOR)
-        textToHighlight = intent.getStringExtra(EXTRA_HIGHLIGHT_TEXT)
+        setSupportActionBar(binding.toolbar)
         supportActionBar?.title = ""
+
         syntaxHighlighter = SyntaxHighlighter(this, binding.editSectionText, binding.editSectionScroll)
         binding.editSectionScroll.isSmoothScrollingEnabled = false
-        captchaHandler = CaptchaHandler(this, pageTitle.wikiSite, binding.captchaContainer.root,
+        captchaHandler = CaptchaHandler(this, viewModel.pageTitle.wikiSite, binding.captchaContainer.root,
                 binding.editSectionText, "", null)
         editPreviewFragment = supportFragmentManager.findFragmentById(R.id.edit_section_preview_fragment) as EditPreviewFragment
         editSummaryFragment = supportFragmentManager.findFragmentById(R.id.edit_section_summary_fragment) as EditSummaryFragment
-        editSummaryFragment.title = pageTitle
-        funnel = WikipediaApp.instance.funnelManager.getEditFunnel(pageTitle)
+        editSummaryFragment.title = viewModel.pageTitle
 
         // Only send the editing start log event if the activity is created for the first time
         if (savedInstanceState == null) {
-            funnel.logStart()
-            EditAttemptStepEvent.logInit(pageTitle)
+            EditAttemptStepEvent.logInit(viewModel.pageTitle)
         }
         if (savedInstanceState != null) {
             if (savedInstanceState.containsKey(EXTRA_KEY_TEMPORARY_WIKITEXT_STORED)) {
-                sectionWikitext = Prefs.temporaryWikitext
+                viewModel.sectionWikitext = Prefs.temporaryWikitext
             }
-            editingAllowed = savedInstanceState.getBoolean(EXTRA_KEY_EDITING_ALLOWED, false)
+            viewModel.editingAllowed = savedInstanceState.getBoolean(EXTRA_KEY_EDITING_ALLOWED, false)
             sectionTextModified = savedInstanceState.getBoolean(EXTRA_KEY_SECTION_TEXT_MODIFIED, false)
         }
-        L10nUtil.setConditionalTextDirection(binding.editSectionText, pageTitle.wikiSite.languageCode)
+        L10nUtil.setConditionalTextDirection(binding.editSectionText, viewModel.pageTitle.wikiSite.languageCode)
+
         fetchSectionText()
 
         binding.viewEditSectionError.retryClickListener = View.OnClickListener {
@@ -236,33 +199,98 @@ class EditSectionActivity : BaseActivity(), ThemeChooserDialog.Callback {
                 invalidateOptionsMenu()
             }
         }
-        binding.editKeyboardOverlay.editText = binding.editSectionText
-        binding.editKeyboardOverlay.callback = syntaxButtonCallback
-        binding.editKeyboardOverlayFormatting.editText = binding.editSectionText
-        binding.editKeyboardOverlayFormatting.callback = syntaxButtonCallback
-        binding.editKeyboardOverlayHeadings.editText = binding.editSectionText
-        binding.editKeyboardOverlayHeadings.callback = syntaxButtonCallback
+
+        SyntaxHighlightViewAdapter(this, viewModel.pageTitle, binding.root, binding.editSectionText,
+            binding.editKeyboardOverlay, binding.editKeyboardOverlayFormatting, binding.editKeyboardOverlayHeadings,
+            Constants.InvokeSource.EDIT_ACTIVITY, requestInsertMedia)
 
         binding.editSectionText.setOnClickListener { finishActionMode() }
         onEditingPrefsChanged()
 
-        binding.editSectionContainer.viewTreeObserver.addOnGlobalLayoutListener {
-            binding.editSectionContainer.post {
-                if (!isDestroyed) {
-                    if (isHardKeyboardAttached() || window.decorView.height - binding.editSectionContainer.height > DimenUtil.roundedDpToPx(150f)) {
-                        binding.editKeyboardOverlayContainer.isVisible = true
-                    } else {
-                        hideAllSyntaxModals()
-                        binding.editKeyboardOverlayContainer.isVisible = false
-                    }
-                }
-            }
+        if (viewModel.invokeSource == Constants.InvokeSource.EDIT_ADD_IMAGE) {
+            // If the intent is to add an image to the article, go directly to the image insertion flow.
+            startInsertImageFlow()
         }
 
         // set focus to the EditText, but keep the keyboard hidden until the user changes the cursor location:
         binding.editSectionText.requestFocus()
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN)
-        hideAllSyntaxModals()
+
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.CREATED) {
+                launch {
+                    viewModel.fetchSectionTextState.collectLatest {
+                        when (it) {
+                            is Resource.Loading -> {
+                                showProgressBar(true)
+                            }
+                            is Resource.Success -> {
+                                showProgressBar(false)
+                                displaySectionText()
+                                maybeShowEditSourceDialog()
+                                invalidateOptionsMenu()
+                                if (!maybeShowTempAccountDialog()) {
+                                    if (Prefs.autoShowEditNotices) {
+                                        showEditNotices()
+                                    } else {
+                                        maybeShowEditNoticesTooltip()
+                                    }
+                                }
+                                it.data?.let { error ->
+                                    FeedbackUtil.showError(this@EditSectionActivity, MwException(error), viewModel.pageTitle.wikiSite)
+                                }
+                            }
+                            is Resource.Error -> {
+                                showProgressBar(false)
+                                showError(it.throwable)
+                            }
+                        }
+                    }
+                }
+
+                launch {
+                    viewModel.postEditState.collectLatest {
+                        when (it) {
+                            is Resource.Loading -> {
+                                showProgressBar(true)
+                                binding.editSectionCaptchaContainer.visibility = View.GONE
+                                captchaHandler.hideCaptcha()
+                                editSummaryFragment.saveSummary()
+                            }
+                            is Resource.Success -> {
+                                it.data.edit?.run {
+                                    when {
+                                        editSucceeded -> {
+                                            AnonymousNotificationHelper.onEditSubmitted()
+                                            viewModel.waitForRevisionUpdate(newRevId)
+                                        }
+                                        hasCaptchaResponse -> onEditSuccess(CaptchaResult(captchaId))
+                                        hasSpamBlacklistResponse -> onEditFailure(MwException(MwServiceError(code, spamblacklist)))
+                                        hasEditErrorCode -> onEditFailure(MwException(MwServiceError(code, info)))
+                                        else -> onEditFailure(IOException("Received unrecognized edit response"))
+                                    }
+                                } ?: run {
+                                    onEditFailure(IOException("An unknown error occurred."))
+                                }
+                            }
+                            is Resource.Error -> {
+                                onEditFailure(it.throwable)
+                            }
+                        }
+                    }
+                }
+
+                launch {
+                    viewModel.waitForRevisionState.collect {
+                        when (it) {
+                            is Resource.Success -> {
+                                onEditSuccess(EditSuccessResult(it.data))
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     public override fun onStart() {
@@ -272,104 +300,69 @@ class EditSectionActivity : BaseActivity(), ThemeChooserDialog.Callback {
 
     public override fun onDestroy() {
         captchaHandler.dispose()
-        cancelCalls()
         binding.editSectionText.removeTextChangedListener(textWatcher)
         syntaxHighlighter.cleanup()
         super.onDestroy()
     }
 
-    private fun isHardKeyboardAttached(): Boolean {
-        return (resources.configuration.hardKeyboardHidden == Configuration.KEYBOARDHIDDEN_NO &&
-                resources.configuration.keyboard != Configuration.KEYBOARD_UNDEFINED &&
-                resources.configuration.keyboard != Configuration.KEYBOARD_NOKEYS)
+    public override fun onPause() {
+        super.onPause()
+        viewModel.sectionWikitext = binding.editSectionText.text.toString()
+    }
+
+    fun getInvokeSource(): Constants.InvokeSource {
+        return viewModel.invokeSource
     }
 
     private fun updateEditLicenseText() {
         val editLicenseText = ActivityCompat.requireViewById<TextView>(this, R.id.licenseText)
-        editLicenseText.text = StringUtil.fromHtml(getString(if (isLoggedIn) R.string.edit_save_action_license_logged_in else R.string.edit_save_action_license_anon,
+        editLicenseText.text = StringUtil.fromHtml(getString(R.string.edit_save_action_license_logged_in,
                 getString(R.string.terms_of_use_url),
-                getString(R.string.cc_by_sa_3_url)))
-        editLicenseText.movementMethod = LinkMovementMethodExt { url: String ->
-            if (url == "https://#login") {
-                funnel.logLoginAttempt()
-                val loginIntent = LoginActivity.newIntent(this@EditSectionActivity,
-                        LoginFunnel.SOURCE_EDIT, funnel.sessionToken)
-                requestLogin.launch(loginIntent)
-            } else {
-                UriUtil.handleExternalLink(this@EditSectionActivity, url.toUri())
-            }
-        }
+                getString(R.string.cc_by_sa_4_url)))
+        editLicenseText.movementMethod = LinkMovementMethod.getInstance()
     }
 
-    private fun cancelCalls() {
-        disposables.clear()
-    }
-
-    private fun doSave(token: String) {
-        val sectionAnchor = StringUtil.addUnderscores(StringUtil.removeHTMLTags(sectionAnchor.orEmpty()))
+    private fun doSave() {
+        val sectionAnchor = StringUtil.addUnderscores(StringUtil.removeHTMLTags(viewModel.sectionAnchor.orEmpty()))
         val isMinorEdit = if (editSummaryFragment.isMinorEdit) true else null
         val watchThisPage = if (editSummaryFragment.watchThisPage) "watch" else "unwatch"
-        var summaryText = if (sectionAnchor.isEmpty() || sectionAnchor == pageTitle.prefixedText) {
-            if (pageTitle.wikiSite.languageCode == "en") "/* top */" else ""
+        var summaryText = if (sectionAnchor.isEmpty() || sectionAnchor == viewModel.pageTitle.prefixedText) {
+            if (viewModel.pageTitle.wikiSite.languageCode == "en") "/* top */" else ""
         } else "/* ${StringUtil.removeUnderscores(sectionAnchor)} */ "
          summaryText += editSummaryFragment.summary
+
         // Summaries are plaintext, so remove any HTML that's made its way into the summary
         summaryText = StringUtil.removeHTMLTags(summaryText)
         if (!isFinishing) {
             showProgressBar(true)
         }
-        disposables.add(ServiceFactory.get(pageTitle.wikiSite).postEditSubmit(pageTitle.prefixedText,
-                if (sectionID >= 0) sectionID.toString() else null, null, summaryText, if (isLoggedIn) "user" else null,
-                binding.editSectionText.text.toString(), null, currentRevision, token,
-                if (captchaHandler.isActive) captchaHandler.captchaId() else "null",
-                if (captchaHandler.isActive) captchaHandler.captchaWord() else "null", isMinorEdit, watchThisPage)
-                .subscribeOn(Schedulers.io())
-                .observeOn(AndroidSchedulers.mainThread())
-                .subscribe({ result ->
-                    result.edit?.run {
-                        when {
-                            editSucceeded -> waitForUpdatedRevision(newRevId)
-                            hasCaptchaResponse -> onEditSuccess(CaptchaResult(captchaId))
-                            hasSpamBlacklistResponse -> onEditFailure(MwException(MwServiceError(code, spamblacklist)))
-                            hasEditErrorCode -> onEditFailure(MwException(MwServiceError(code, info)))
-                            else -> onEditFailure(IOException("Received unrecognized edit response"))
-                        }
-                    } ?: run {
-                        onEditFailure(IOException("An unknown error occurred."))
-                    }
-                }) { onEditFailure(it) }
+
+        viewModel.postEdit(
+            isMinorEdit = isMinorEdit,
+            watchThisPage = watchThisPage,
+            summaryText = summaryText,
+            editSectionText = binding.editSectionText.text.toString(),
+            captchaId = captchaHandler.captchaId().toString(),
+            captchaWord = captchaHandler.captchaWord().toString(),
+            editTags = getEditTag()
         )
 
         BreadCrumbLogEvent.logInputField(this, editSummaryFragment.summaryText)
     }
 
-    @Suppress("SameParameterValue")
-    private fun waitForUpdatedRevision(newRevision: Long) {
-        AnonymousNotificationHelper.onEditSubmitted()
-        disposables.add(ServiceFactory.getRest(pageTitle.wikiSite)
-            .getSummaryResponse(pageTitle.prefixedText, null, OkHttpConnectionFactory.CACHE_CONTROL_FORCE_NETWORK.toString(), null, null, null)
-            .delay(2, TimeUnit.SECONDS)
-            .subscribeOn(Schedulers.io())
-            .map { response ->
-                if (response.body()!!.revision < newRevision) {
-                    throw IllegalStateException()
-                }
-                response.body()!!.revision
-            }
-            .retry(10) { it is IllegalStateException }
-            .observeOn(AndroidSchedulers.mainThread())
-            .subscribe({
-                onEditSuccess(EditSuccessResult(it))
-            }, {
-                onEditSuccess(EditSuccessResult(newRevision))
-            })
-        )
+    private fun getEditTag(): String {
+        return when {
+            viewModel.invokeSource == Constants.InvokeSource.TALK_TOPIC_ACTIVITY -> EditTags.APP_TALK_SOURCE
+            viewModel.invokeSource == Constants.InvokeSource.EDIT_ADD_IMAGE -> if (intent.getBooleanExtra(InsertMediaActivity.EXTRA_INSERTED_INTO_INFOBOX, false)) EditTags.APP_IMAGE_ADD_INFOBOX else EditTags.APP_IMAGE_ADD_TOP
+            !viewModel.textToHighlight.isNullOrEmpty() -> EditTags.APP_SELECT_SOURCE
+            viewModel.sectionID >= 0 -> EditTags.APP_SECTION_SOURCE
+            else -> EditTags.APP_FULL_SOURCE
+        }
     }
 
     private fun onEditSuccess(result: EditResult) {
         if (result is EditSuccessResult) {
-            funnel.logSaved(result.revID)
-            EditAttemptStepEvent.logSaveSuccess(pageTitle)
+            EditAttemptStepEvent.logSaveSuccess(viewModel.pageTitle)
             // TODO: remove the artificial delay and use the new revision
             // ID returned to request the updated version of the page once
             // revision support for mobile-sections is added to RESTBase
@@ -379,7 +372,8 @@ class EditSectionActivity : BaseActivity(), ThemeChooserDialog.Callback {
 
                 // Build intent that includes the section we were editing, so we can scroll to it later
                 val data = Intent()
-                data.putExtra(EXTRA_SECTION_ID, sectionID)
+                data.putExtra(EXTRA_SECTION_ID, viewModel.sectionID)
+                data.putExtra(EXTRA_REV_ID, result.revID)
                 setResult(EditHandler.RESULT_REFRESH_PAGE, data)
                 DeviceUtil.hideSoftKeyboard(this@EditSectionActivity)
                 finish()
@@ -388,16 +382,10 @@ class EditSectionActivity : BaseActivity(), ThemeChooserDialog.Callback {
         }
         showProgressBar(false)
         if (result is CaptchaResult) {
-            if (captchaHandler.isActive) {
-                // Captcha entry failed!
-                funnel.logCaptchaFailure()
-            }
             binding.editSectionCaptchaContainer.visibility = View.VISIBLE
             captchaHandler.handleCaptcha(null, result)
-            funnel.logCaptchaShown()
         } else {
-            funnel.logError(result.result)
-            EditAttemptStepEvent.logSaveFailure(pageTitle)
+            EditAttemptStepEvent.logSaveFailure(viewModel.pageTitle)
             // Expand to do everything.
             onEditFailure(Throwable())
         }
@@ -414,15 +402,14 @@ class EditSectionActivity : BaseActivity(), ThemeChooserDialog.Callback {
     }
 
     private fun showRetryDialog(t: Throwable) {
-        val retryDialog = AlertDialog.Builder(this@EditSectionActivity)
+        MaterialAlertDialogBuilder(this@EditSectionActivity)
                 .setTitle(R.string.dialog_message_edit_failed)
                 .setMessage(t.localizedMessage)
                 .setPositiveButton(R.string.dialog_message_edit_failed_retry) { dialog, _ ->
-                    editTokenThenSave
+                    doSave()
                     dialog.dismiss()
                 }
-                .setNegativeButton(R.string.dialog_message_edit_failed_cancel) { dialog, _ -> dialog.dismiss() }.create()
-        retryDialog.show()
+                .setNegativeButton(R.string.dialog_message_edit_failed_cancel) { dialog, _ -> dialog.dismiss() }.show()
     }
 
     /**
@@ -431,23 +418,24 @@ class EditSectionActivity : BaseActivity(), ThemeChooserDialog.Callback {
      */
     private fun handleEditingException(caught: MwException) {
         val code = caught.title
-
-        // In the case of certain AbuseFilter responses, they are sent as a code, instead of a
-        // fully parsed response. We need to make one more API call to get the parsed message:
-        if (code.startsWith("abusefilter-") && caught.message.contains("abusefilter-") && caught.message.length < 100) {
-            disposables.add(ServiceFactory.get(pageTitle.wikiSite).parsePage("MediaWiki:" + StringUtil.sanitizeAbuseFilterCode(caught.message))
-                    .subscribeOn(Schedulers.io())
-                    .observeOn(AndroidSchedulers.mainThread())
-                    .subscribe({ response: MwParseResponse -> showError(MwException(MwServiceError(code, response.text))) }) { showError(it) })
-        } else if ("editconflict" == code) {
-            AlertDialog.Builder(this@EditSectionActivity)
+        lifecycleScope.launch(CoroutineExceptionHandler { _, t ->
+            showError(t)
+        }) {
+            // In the case of certain AbuseFilter responses, they are sent as a code, instead of a
+            // fully parsed response. We need to make one more API call to get the parsed message:
+            if (code.startsWith("abusefilter-") && caught.message.contains("abusefilter-") && caught.message.length < 100) {
+                val response = ServiceFactory.get(viewModel.pageTitle.wikiSite).parsePage("MediaWiki:" + StringUtil.sanitizeAbuseFilterCode(caught.message))
+                showError(MwException(MwServiceError(code, response.text)))
+            } else if ("editconflict" == code) {
+                MaterialAlertDialogBuilder(this@EditSectionActivity)
                     .setTitle(R.string.edit_conflict_title)
                     .setMessage(R.string.edit_conflict_message)
                     .setPositiveButton(R.string.edit_conflict_dialog_ok_button_text, null)
                     .show()
-            resetToStart()
-        } else {
-            showError(caught)
+                resetToStart()
+            } else {
+                showError(caught)
+            }
         }
     }
 
@@ -456,25 +444,52 @@ class EditSectionActivity : BaseActivity(), ThemeChooserDialog.Callback {
      * based on the current state of the button.
      */
     fun clickNextButton() {
+        val addImageTitle = intent.parcelableExtra<PageTitle>(InsertMediaActivity.EXTRA_IMAGE_TITLE)
+        val addImageSource = intent.getStringExtra(InsertMediaActivity.EXTRA_IMAGE_SOURCE)
+        val addImageSourceProjects = intent.getStringExtra(InsertMediaActivity.EXTRA_IMAGE_SOURCE_PROJECTS)
         when {
             editSummaryFragment.isActive -> {
-                editTokenThenSave
-                funnel.logSaveAttempt()
-                EditAttemptStepEvent.logSaveAttempt(pageTitle)
+                if (viewModel.invokeSource == Constants.InvokeSource.EDIT_ADD_IMAGE) {
+                    ImageRecommendationsEvent.logAction("editsummary_save", "editsummary_dialog", ImageRecommendationsEvent.getActionDataString(
+                        filename = addImageTitle?.prefixedText.orEmpty(), recommendationSource = addImageSource.orEmpty(), recommendationSourceProjects = addImageSourceProjects.orEmpty(),
+                        acceptanceState = "accepted", captionAdd = !intent.getStringExtra(InsertMediaActivity.RESULT_IMAGE_CAPTION).isNullOrEmpty(),
+                        altTextAdd = !intent.getStringExtra(InsertMediaActivity.RESULT_IMAGE_ALT).isNullOrEmpty()), addImageTitle?.wikiSite?.languageCode.orEmpty())
+                }
+                doSave()
+                EditAttemptStepEvent.logSaveAttempt(viewModel.pageTitle)
                 supportActionBar?.title = getString(R.string.preview_edit_summarize_edit_title)
             }
             editPreviewFragment.isActive -> {
+                if (viewModel.invokeSource == Constants.InvokeSource.EDIT_ADD_IMAGE) {
+                    ImageRecommendationsEvent.logAction("caption_preview_accept", "caption_preview", ImageRecommendationsEvent.getActionDataString(
+                        filename = addImageTitle?.prefixedText.orEmpty(), recommendationSource = addImageSource.orEmpty(),
+                        recommendationSourceProjects = addImageSourceProjects.orEmpty(), acceptanceState = "accepted",
+                        captionAdd = !intent.getStringExtra(InsertMediaActivity.RESULT_IMAGE_CAPTION).isNullOrEmpty(),
+                        altTextAdd = !intent.getStringExtra(InsertMediaActivity.RESULT_IMAGE_ALT).isNullOrEmpty()), viewModel.pageTitle.wikiSite.languageCode)
+                    ImageRecommendationsEvent.logImpression("editsummary_dialog", ImageRecommendationsEvent.getActionDataString(
+                        filename = addImageTitle?.prefixedText.orEmpty(), recommendationSource = addImageSource.orEmpty(),
+                        recommendationSourceProjects = addImageSourceProjects.orEmpty(), acceptanceState = "accepted",
+                        captionAdd = !intent.getStringExtra(InsertMediaActivity.RESULT_IMAGE_CAPTION).isNullOrEmpty(),
+                        altTextAdd = !intent.getStringExtra(InsertMediaActivity.RESULT_IMAGE_ALT).isNullOrEmpty()), viewModel.pageTitle.wikiSite.languageCode)
+                }
                 editSummaryFragment.show()
                 supportActionBar?.title = getString(R.string.preview_edit_summarize_edit_title)
             }
             else -> {
                 // we must be showing the editing window, so show the Preview.
                 DeviceUtil.hideSoftKeyboard(this)
-                editPreviewFragment.showPreview(pageTitle, binding.editSectionText.text.toString())
-                funnel.logPreview()
-                EditAttemptStepEvent.logSaveIntent(pageTitle)
-                supportActionBar?.title = getString(R.string.preview_edit_title)
+                binding.editSectionContainer.isVisible = false
+                editPreviewFragment.showPreview(viewModel.pageTitle, binding.editSectionText.text.toString())
+                EditAttemptStepEvent.logSaveIntent(viewModel.pageTitle)
+                supportActionBar?.title = getString(R.string.edit_preview)
                 setNavigationBarColor(ResourceUtil.getThemedColor(this, R.attr.paper_color))
+                if (viewModel.invokeSource == Constants.InvokeSource.EDIT_ADD_IMAGE) {
+                    ImageRecommendationsEvent.logImpression("caption_preview", ImageRecommendationsEvent.getActionDataString(
+                        filename = addImageTitle?.prefixedText.orEmpty(), recommendationSource = addImageSource.orEmpty(),
+                        recommendationSourceProjects = addImageSourceProjects.orEmpty(), acceptanceState = "accepted",
+                        captionAdd = !intent.getStringExtra(InsertMediaActivity.RESULT_IMAGE_CAPTION).isNullOrEmpty(),
+                        altTextAdd = !intent.getStringExtra(InsertMediaActivity.RESULT_IMAGE_ALT).isNullOrEmpty()), viewModel.pageTitle.wikiSite.languageCode)
+                }
             }
         }
     }
@@ -487,7 +502,7 @@ class EditSectionActivity : BaseActivity(), ThemeChooserDialog.Callback {
             }
             R.id.menu_edit_theme -> {
                 binding.editSectionText.enqueueNoScrollingLayoutChange()
-                bottomSheetPresenter.show(supportFragmentManager, ThemeChooserDialog.newInstance(Constants.InvokeSource.EDIT_ACTIVITY, true))
+                ExclusiveBottomSheetPresenter.show(supportFragmentManager, ThemeChooserDialog.newInstance(Constants.InvokeSource.EDIT_ACTIVITY, true))
                 true
             }
             R.id.menu_find_in_editor -> {
@@ -498,20 +513,29 @@ class EditSectionActivity : BaseActivity(), ThemeChooserDialog.Callback {
                 showEditNotices()
                 true
             }
+            R.id.menu_temp_account -> {
+                maybeShowTempAccountDialog(true)
+                true
+            }
             else -> super.onOptionsItemSelected(item)
         }
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menuInflater.inflate(R.menu.menu_edit_section, menu)
-        val item = menu.findItem(R.id.menu_save_section)
 
+        menu.findItem(R.id.menu_temp_account).apply {
+            isVisible = !AccountUtil.isLoggedIn || AccountUtil.isTemporaryAccount
+            setIcon(if (AccountUtil.isTemporaryAccount) R.drawable.ic_temp_account else R.drawable.ic_anon_account)
+        }
+
+        val item = menu.findItem(R.id.menu_save_section)
         supportActionBar?.elevation = if (editPreviewFragment.isActive) 0f else DimenUtil.dpToPx(4f)
-        menu.findItem(R.id.menu_edit_notices).isVisible = editNotices.isNotEmpty() && !editPreviewFragment.isActive
+        menu.findItem(R.id.menu_edit_notices).isVisible = viewModel.editNotices.isNotEmpty() && !editPreviewFragment.isActive
         menu.findItem(R.id.menu_edit_theme).isVisible = !editPreviewFragment.isActive
         menu.findItem(R.id.menu_find_in_editor).isVisible = !editPreviewFragment.isActive
-        item.title = getString(if (editSummaryFragment.isActive) R.string.edit_done else R.string.edit_next)
-        if (editingAllowed && binding.viewProgressBar.isGone) {
+        item.title = getString(if (editSummaryFragment.isActive) R.string.edit_done else (if (viewModel.invokeSource == Constants.InvokeSource.EDIT_ADD_IMAGE) R.string.onboarding_continue else R.string.edit_next))
+        if (viewModel.editingAllowed && binding.viewProgressBar.isGone) {
             item.isEnabled = sectionTextModified
         } else {
             item.isEnabled = false
@@ -535,7 +559,7 @@ class EditSectionActivity : BaseActivity(), ThemeChooserDialog.Callback {
         actionBarButtonBinding.editActionbarButtonText.text = menuItem.title
         actionBarButtonBinding.editActionbarButtonText.setTextColor(
             ResourceUtil.getThemedColor(this,
-                if (emphasize) R.attr.colorAccent else R.attr.material_theme_de_emphasised_color))
+                if (emphasize) R.attr.progressive_color else R.attr.placeholder_color))
         actionBarButtonBinding.root.tag = menuItem
         actionBarButtonBinding.root.isEnabled = menuItem.isEnabled
         actionBarButtonBinding.root.setOnClickListener { onOptionsItemSelected(it.tag as MenuItem) }
@@ -584,12 +608,12 @@ class EditSectionActivity : BaseActivity(), ThemeChooserDialog.Callback {
         super.onSaveInstanceState(outState)
         outState.putBoolean(EXTRA_KEY_TEMPORARY_WIKITEXT_STORED, true)
         outState.putBoolean(EXTRA_KEY_SECTION_TEXT_MODIFIED, sectionTextModified)
-        outState.putBoolean(EXTRA_KEY_EDITING_ALLOWED, editingAllowed)
-        Prefs.temporaryWikitext = sectionWikitext.orEmpty()
+        outState.putBoolean(EXTRA_KEY_EDITING_ALLOWED, viewModel.editingAllowed)
+        Prefs.temporaryWikitext = viewModel.sectionWikitext.orEmpty()
     }
 
     private fun updateTextSize() {
-        binding.editSectionText.textSize = WikipediaApp.instance.getFontSize(window, editing = true)
+        binding.editSectionText.textSize = WikipediaApp.instance.getFontSize(editing = true)
     }
 
     private fun resetToStart() {
@@ -601,57 +625,14 @@ class EditSectionActivity : BaseActivity(), ThemeChooserDialog.Callback {
             editSummaryFragment.hide()
         }
         if (editPreviewFragment.isActive) {
-            editPreviewFragment.hide(binding.editSectionContainer)
+            editPreviewFragment.hide()
+            binding.editSectionContainer.isVisible = true
         }
     }
 
     private fun fetchSectionText() {
-        if (sectionWikitext == null) {
-            showProgressBar(true)
-            disposables.add(ServiceFactory.get(pageTitle.wikiSite).getWikiTextForSectionWithInfo(pageTitle.prefixedText, if (sectionID >= 0) sectionID else null)
-                    .subscribeOn(Schedulers.io())
-                    .observeOn(AndroidSchedulers.mainThread())
-                    .doOnTerminate { showProgressBar(false) }
-                    .subscribe({ response ->
-                        val firstPage = response.query?.firstPage()!!
-                        val rev = firstPage.revisions[0]
-
-                        pageTitle = PageTitle(firstPage.title, pageTitle.wikiSite).apply {
-                            this.displayText = pageTitle.displayText
-                        }
-                        sectionWikitext = rev.content
-                        currentRevision = rev.revId
-
-                        val editError = response.query?.firstPage()!!.getErrorForAction("edit")
-                        if (editError.isEmpty()) {
-                            editingAllowed = true
-                        } else {
-                            val error = editError[0]
-                            FeedbackUtil.showError(this, MwException(error), pageTitle.wikiSite)
-                        }
-                        displaySectionText()
-                        maybeShowEditSourceDialog()
-                    }) {
-                        showError(it)
-                        L.e(it)
-                    })
-            disposables.add(ServiceFactory.get(pageTitle.wikiSite).getVisualEditorMetadata(pageTitle.prefixedText)
-                    .subscribeOn(Schedulers.io())
-                    .observeOn(AndroidSchedulers.mainThread())
-                    .subscribe({
-                        editNotices.clear()
-                        // Populate edit notices, but filter out anonymous edit warnings, since
-                        // we show that type of warning ourselves when previewing.
-                        editNotices.addAll(it.visualeditor?.getEditNotices().orEmpty()
-                                .filterKeys { key -> key.startsWith("editnotice") }
-                                .values.filter { str -> StringUtil.fromHtml(str).trim().isNotEmpty() })
-                        invalidateOptionsMenu()
-                        if (Prefs.autoShowEditNotices) {
-                            showEditNotices()
-                        } else {
-                            maybeShowEditNoticesTooltip()
-                        }
-                    }, { L.e(it) }))
+        if (viewModel.sectionWikitext != null) {
+            viewModel.fetchSectionText()
         } else {
             displaySectionText()
         }
@@ -670,20 +651,20 @@ class EditSectionActivity : BaseActivity(), ThemeChooserDialog.Callback {
     }
 
     private fun showEditNotices() {
-        if (editNotices.isEmpty()) {
+        if (viewModel.editNotices.isEmpty()) {
             return
         }
-        EditNoticesDialog(pageTitle.wikiSite, editNotices, this).show()
+        EditNoticesDialog(viewModel.pageTitle.wikiSite, viewModel.editNotices, this).show()
     }
 
     private fun maybeShowEditSourceDialog() {
-        if (!Prefs.showEditTalkPageSourcePrompt || (pageTitle.namespace() !== Namespace.TALK && pageTitle.namespace() !== Namespace.USER_TALK)) {
+        if (!Prefs.showEditTalkPageSourcePrompt || (viewModel.pageTitle.namespace() !== Namespace.TALK && viewModel.pageTitle.namespace() !== Namespace.USER_TALK)) {
             return
         }
         val binding = DialogWithCheckboxBinding.inflate(layoutInflater)
         binding.dialogMessage.text = StringUtil.fromHtml(getString(R.string.talk_edit_disclaimer))
         binding.dialogMessage.movementMethod = movementMethod
-        AlertDialog.Builder(this@EditSectionActivity)
+        MaterialAlertDialogBuilder(this@EditSectionActivity)
             .setView(binding.root)
             .setPositiveButton(R.string.onboarding_got_it) { dialog, _ -> dialog.dismiss() }
             .setOnDismissListener {
@@ -693,13 +674,12 @@ class EditSectionActivity : BaseActivity(), ThemeChooserDialog.Callback {
     }
 
     private fun displaySectionText() {
-        binding.editSectionText.setText(sectionWikitext)
         showProgressBar(false)
+        binding.editSectionText.setText(viewModel.sectionWikitext)
         binding.editSectionContainer.isVisible = true
-        scrollToHighlight(textToHighlight)
-        binding.editSectionText.isEnabled = editingAllowed
-        binding.editKeyboardOverlay.isVisible = editingAllowed
-        hideAllSyntaxModals()
+        binding.editSectionText.isEnabled = viewModel.editingAllowed
+        binding.editKeyboardOverlay.isVisible = viewModel.editingAllowed
+        scrollToHighlight(viewModel.textToHighlight)
     }
 
     private fun scrollToHighlight(highlightText: String?) {
@@ -709,18 +689,23 @@ class EditSectionActivity : BaseActivity(), ThemeChooserDialog.Callback {
         binding.editSectionText.highlightText(highlightText)
     }
 
-    private fun hideAllSyntaxModals() {
-        binding.editKeyboardOverlayHeadings.isVisible = false
-        binding.editKeyboardOverlayFormattingContainer.isVisible = false
-        binding.editKeyboardOverlay.onAfterOverlaysHidden()
+    override fun getParentPageTitle(): PageTitle {
+        return viewModel.pageTitle
     }
 
-    fun showProgressBar(enable: Boolean) {
-        binding.viewProgressBar.isVisible = enable
+    override fun showProgressBar(visible: Boolean) {
+        binding.viewProgressBar.isVisible = visible
         invalidateOptionsMenu()
     }
 
+    override fun isNewPage(): Boolean {
+        return false
+    }
+
     override fun onBackPressed() {
+        val addImageTitle = intent.parcelableExtra<PageTitle>(InsertMediaActivity.EXTRA_IMAGE_TITLE)
+        val addImageSource = intent.getStringExtra(InsertMediaActivity.EXTRA_IMAGE_SOURCE)
+        val addImageSourceProjects = intent.getStringExtra(InsertMediaActivity.EXTRA_IMAGE_SOURCE_PROJECTS)
         if (binding.viewProgressBar.isVisible) {
             // If it is visible, it means we should wait until all the requests are done.
             return
@@ -732,46 +717,115 @@ class EditSectionActivity : BaseActivity(), ThemeChooserDialog.Callback {
         }
         binding.viewEditSectionError.isVisible = false
         if (editSummaryFragment.handleBackPressed()) {
-            supportActionBar?.title = getString(R.string.preview_edit_title)
+            ImageRecommendationsEvent.logAction("back", "editsummary_dialog", ImageRecommendationsEvent.getActionDataString(
+                filename = addImageTitle?.prefixedText.orEmpty(), recommendationSource = addImageSource.orEmpty(), recommendationSourceProjects = addImageSourceProjects.orEmpty(), acceptanceState = "accepted",
+                captionAdd = !intent.getStringExtra(InsertMediaActivity.RESULT_IMAGE_CAPTION).isNullOrEmpty(),
+                altTextAdd = !intent.getStringExtra(InsertMediaActivity.RESULT_IMAGE_ALT).isNullOrEmpty()), viewModel.pageTitle.wikiSite.languageCode)
+            supportActionBar?.title = getString(R.string.edit_preview)
             return
         }
         if (editPreviewFragment.isActive) {
-            editPreviewFragment.hide(binding.editSectionContainer)
+            ImageRecommendationsEvent.logAction("back", "caption_preview", ImageRecommendationsEvent.getActionDataString(
+                filename = addImageTitle?.prefixedText.orEmpty(), recommendationSource = addImageSource.orEmpty(),
+                recommendationSourceProjects = addImageSourceProjects.orEmpty(), acceptanceState = "accepted",
+                captionAdd = !intent.getStringExtra(InsertMediaActivity.RESULT_IMAGE_CAPTION).isNullOrEmpty(),
+                altTextAdd = !intent.getStringExtra(InsertMediaActivity.RESULT_IMAGE_ALT).isNullOrEmpty()), viewModel.pageTitle.wikiSite.languageCode)
+            editPreviewFragment.hide()
+            binding.editSectionContainer.isVisible = true
             supportActionBar?.title = null
+
+            // If we came from the Image Recommendations workflow, bring back the Add Image activity.
+            if (viewModel.invokeSource == Constants.InvokeSource.EDIT_ADD_IMAGE) {
+                // ...and reset the wikitext to the original, since the Add Image flow will re-
+                // modify it when the user returns to it.
+                viewModel.sectionWikitext = viewModel.sectionWikitextOriginal
+                binding.editSectionText.setText(viewModel.sectionWikitext)
+
+                startInsertImageFlow()
+            }
             return
         }
         setNavigationBarColor(ResourceUtil.getThemedColor(this, android.R.attr.colorBackground))
         DeviceUtil.hideSoftKeyboard(this)
         if (sectionTextModified) {
-            val alert = AlertDialog.Builder(this)
+            doExitActionWithConfirmationDialog { finish() }
+            return
+        }
+        super.onBackPressed()
+    }
+
+    private fun doExitActionWithConfirmationDialog(action: () -> Unit) {
+        if (sectionTextModified) {
+            val alert = MaterialAlertDialogBuilder(this)
             alert.setMessage(getString(R.string.edit_abandon_confirm))
             alert.setPositiveButton(getString(R.string.edit_abandon_confirm_yes)) { dialog, _ ->
                 dialog.dismiss()
-                finish()
+                action()
             }
             alert.setNegativeButton(getString(R.string.edit_abandon_confirm_no)) { dialog, _ -> dialog.dismiss() }
             alert.create().show()
         } else {
-            finish()
+            action()
         }
     }
 
-    companion object {
-        private const val EXTRA_KEY_SECTION_TEXT_MODIFIED = "sectionTextModified"
-        private const val EXTRA_KEY_TEMPORARY_WIKITEXT_STORED = "hasTemporaryWikitextStored"
-        private const val EXTRA_KEY_EDITING_ALLOWED = "editingAllowed"
-        const val EXTRA_TITLE = "org.wikipedia.edit_section.title"
-        const val EXTRA_SECTION_ID = "org.wikipedia.edit_section.sectionid"
-        const val EXTRA_SECTION_ANCHOR = "org.wikipedia.edit_section.anchor"
-        const val EXTRA_HIGHLIGHT_TEXT = "org.wikipedia.edit_section.highlight"
-
-        fun newIntent(context: Context, sectionId: Int, sectionAnchor: String?, title: PageTitle, highlightText: String? = null): Intent {
-            return Intent(context, EditSectionActivity::class.java)
-                .putExtra(EXTRA_SECTION_ID, sectionId)
-                .putExtra(EXTRA_SECTION_ANCHOR, sectionAnchor)
-                .putExtra(EXTRA_TITLE, title)
-                .putExtra(EXTRA_HIGHLIGHT_TEXT, highlightText)
+    private fun maybeShowTempAccountDialog(fromToolbar: Boolean = false): Boolean {
+        if (fromToolbar || (!Prefs.tempAccountDialogShown && (!AccountUtil.isLoggedIn || AccountUtil.isTemporaryAccount))) {
+            val dialog = MaterialAlertDialogBuilder(this, R.style.AlertDialogTheme_Icon_NegativeInactive)
+                .setIcon(if (AccountUtil.isTemporaryAccount) R.drawable.ic_temp_account else R.drawable.ic_anon_account)
+                .setTitle(if (AccountUtil.isTemporaryAccount) R.string.temp_account_using_title else R.string.temp_account_not_logged_in)
+                .setMessage(StringUtil.fromHtml(if (AccountUtil.isTemporaryAccount) getString(R.string.temp_account_temp_dialog_body, AccountUtil.userName)
+                else getString(if (viewModel.tempAccountsEnabled) R.string.temp_account_anon_dialog_body else R.string.temp_account_anon_ip_dialog_body, getString(R.string.temp_accounts_help_url))))
+                .setPositiveButton(getString(if (fromToolbar) R.string.temp_account_dialog_ok else R.string.create_account_button)) { dialog, _ ->
+                    dialog.dismiss()
+                    if (!fromToolbar) {
+                        launchLogin()
+                    }
+                }
+                .setNegativeButton(getString(if (fromToolbar) R.string.create_account_login else R.string.temp_account_dialog_ok)) { dialog, _ ->
+                    dialog.dismiss()
+                    if (fromToolbar) {
+                        launchLogin()
+                    }
+                }
+                .show()
+            dialog.window?.let {
+                it.decorView.findViewById<TextView>(android.R.id.message)?.movementMethod = LinkMovementMethodExt { link ->
+                    if (link.contains("#login") || link.contains("#createaccount")) {
+                        launchLogin(link.contains("#createaccount"))
+                    } else {
+                        UriUtil.handleExternalLink(this, Uri.parse(link))
+                    }
+                    dialog.dismiss()
+                }
+            }
+            Prefs.tempAccountDialogShown = true
+            return true
         }
+        return false
+    }
+
+    private fun launchLogin(createAccountFirst: Boolean = true) {
+        requestLogin.launch(LoginActivity.newIntent(this, LoginActivity.SOURCE_EDIT, createAccountFirst))
+    }
+
+    private fun startInsertImageFlow() {
+        val addImageTitle = intent.parcelableExtra<PageTitle>(InsertMediaActivity.EXTRA_IMAGE_TITLE)!!
+        val addImageSource = intent.getStringExtra(InsertMediaActivity.EXTRA_IMAGE_SOURCE)!!
+        val addImageIntent = InsertMediaActivity.newIntent(this, viewModel.pageTitle.wikiSite,
+            viewModel.pageTitle.displayText, viewModel.invokeSource, addImageTitle, addImageSource)
+
+        // implicitly add any saved parameters from the previous insertion.
+        addImageIntent.putExtra(InsertMediaActivity.EXTRA_IMAGE_TITLE, intent.parcelableExtra<PageTitle>(InsertMediaActivity.EXTRA_IMAGE_TITLE))
+        addImageIntent.putExtra(InsertMediaActivity.RESULT_IMAGE_CAPTION, intent.getStringExtra(InsertMediaActivity.RESULT_IMAGE_CAPTION))
+        addImageIntent.putExtra(InsertMediaActivity.RESULT_IMAGE_ALT, intent.getStringExtra(InsertMediaActivity.RESULT_IMAGE_ALT))
+        addImageIntent.putExtra(InsertMediaActivity.RESULT_IMAGE_SIZE, intent.getStringExtra(InsertMediaActivity.RESULT_IMAGE_SIZE))
+        addImageIntent.putExtra(InsertMediaActivity.RESULT_IMAGE_TYPE, intent.getStringExtra(InsertMediaActivity.RESULT_IMAGE_TYPE))
+        addImageIntent.putExtra(InsertMediaActivity.RESULT_IMAGE_POS, intent.getStringExtra(InsertMediaActivity.RESULT_IMAGE_POS))
+        addImageIntent.putExtra(InsertMediaActivity.EXTRA_IMAGE_SOURCE, intent.getStringExtra(InsertMediaActivity.EXTRA_IMAGE_SOURCE))
+        addImageIntent.putExtra(InsertMediaActivity.EXTRA_IMAGE_SOURCE_PROJECTS, intent.getStringExtra(InsertMediaActivity.EXTRA_IMAGE_SOURCE_PROJECTS))
+
+        requestInsertMedia.launch(addImageIntent)
     }
 
     override fun onToggleDimImages() { }
@@ -788,5 +842,44 @@ class EditSectionActivity : BaseActivity(), ThemeChooserDialog.Callback {
         binding.editSectionText.typeface = if (Prefs.editMonoSpaceFontEnabled) Typeface.MONOSPACE else Typeface.DEFAULT
         binding.editSectionText.showLineNumbers = Prefs.editLineNumbersEnabled
         binding.editSectionText.invalidate()
+    }
+
+    override fun onLinkPreviewLoadPage(title: PageTitle, entry: HistoryEntry, inNewTab: Boolean) {
+        doExitActionWithConfirmationDialog {
+            startActivity(if (inNewTab) PageActivity.newIntentForNewTab(this, entry, title) else
+                PageActivity.newIntentForCurrentTab(this, entry, title, false))
+        }
+    }
+
+    override fun onLinkPreviewDismiss() {
+        if (!isDestroyed) {
+            binding.editSectionText.postDelayed({
+                DeviceUtil.showSoftKeyboard(binding.editSectionText)
+            }, 200)
+        }
+    }
+
+    companion object {
+        const val EXTRA_KEY_SECTION_TEXT_MODIFIED = "sectionTextModified"
+        const val EXTRA_KEY_TEMPORARY_WIKITEXT_STORED = "hasTemporaryWikitextStored"
+        const val EXTRA_KEY_EDITING_ALLOWED = "editingAllowed"
+        const val EXTRA_SECTION_ID = "sectionId"
+        const val EXTRA_SECTION_ANCHOR = "sectionAnchor"
+        const val EXTRA_HIGHLIGHT_TEXT = "sectionHighlightText"
+        const val EXTRA_REV_ID = "revId"
+
+        fun newIntent(context: Context, sectionId: Int, sectionAnchor: String?, title: PageTitle,
+                      invokeSource: Constants.InvokeSource, highlightText: String? = null,
+                      addImageTitle: PageTitle? = null, addImageSource: String = "", addImageSourceProjects: String = ""): Intent {
+            return Intent(context, EditSectionActivity::class.java)
+                .putExtra(EXTRA_SECTION_ID, sectionId)
+                .putExtra(EXTRA_SECTION_ANCHOR, sectionAnchor)
+                .putExtra(Constants.ARG_TITLE, title)
+                .putExtra(EXTRA_HIGHLIGHT_TEXT, highlightText)
+                .putExtra(Constants.INTENT_EXTRA_INVOKE_SOURCE, invokeSource)
+                .putExtra(InsertMediaActivity.EXTRA_IMAGE_TITLE, addImageTitle)
+                .putExtra(InsertMediaActivity.EXTRA_IMAGE_SOURCE, addImageSource)
+                .putExtra(InsertMediaActivity.EXTRA_IMAGE_SOURCE_PROJECTS, addImageSourceProjects)
+        }
     }
 }

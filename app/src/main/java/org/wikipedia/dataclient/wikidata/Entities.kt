@@ -1,5 +1,6 @@
 package org.wikipedia.dataclient.wikidata
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -22,16 +23,40 @@ class Entities : MwResponse() {
     @Serializable
     class Entity {
         val id: String = ""
-        val labels: Map<String, Label> = emptyMap()
-        val descriptions: Map<String, Label> = emptyMap()
-        val sitelinks: Map<String, SiteLink> = emptyMap()
-        val statements: JsonElement? = null
+        private val labels: JsonElement? = null
+        private val descriptions: JsonElement? = null
+        private val sitelinks: JsonElement? = null
+        private val statements: JsonElement? = null
         val missing: JsonElement? = null
-        val lastRevId: Long = 0
+        @SerialName("lastrevid") val lastRevId: Long = 0
 
         fun getStatements(): Map<String, List<Claims.Claim>> {
             return if (statements != null && statements !is JsonArray) {
                 JsonUtil.json.decodeFromJsonElement(statements)
+            } else {
+                emptyMap()
+            }
+        }
+
+        fun getLabels(): Map<String, Label> {
+            return if (labels != null && labels !is JsonArray) {
+                JsonUtil.json.decodeFromJsonElement(labels)
+            } else {
+                emptyMap()
+            }
+        }
+
+        fun getDescriptions(): Map<String, Label> {
+            return if (descriptions != null && descriptions !is JsonArray) {
+                JsonUtil.json.decodeFromJsonElement(descriptions)
+            } else {
+                emptyMap()
+            }
+        }
+
+        fun getSiteLinks(): Map<String, SiteLink> {
+            return if (sitelinks != null && sitelinks !is JsonArray) {
+                JsonUtil.json.decodeFromJsonElement(sitelinks)
             } else {
                 emptyMap()
             }

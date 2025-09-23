@@ -6,21 +6,14 @@ import android.content.Context
 import android.net.Uri
 import android.view.LayoutInflater
 import android.view.View
-import androidx.appcompat.app.AppCompatActivity
 import org.wikipedia.Constants.InvokeSource
 import org.wikipedia.R
-import org.wikipedia.WikipediaApp
-import org.wikipedia.analytics.FeedFunnel
 import org.wikipedia.databinding.ViewCardOnThisDayBinding
-import org.wikipedia.feed.model.CardType
 import org.wikipedia.feed.view.CardFooterView
 import org.wikipedia.feed.view.DefaultFeedCardView
 import org.wikipedia.feed.view.FeedAdapter
 import org.wikipedia.history.HistoryEntry
-import org.wikipedia.page.ExclusiveBottomSheetPresenter
-import org.wikipedia.readinglist.AddToReadingListDialog
 import org.wikipedia.readinglist.LongPressMenu
-import org.wikipedia.readinglist.MoveToReadingListDialog
 import org.wikipedia.readinglist.ReadingListBehaviorsUtil
 import org.wikipedia.readinglist.database.ReadingListPage
 import org.wikipedia.util.DateUtil
@@ -31,8 +24,6 @@ import org.wikipedia.views.ImageZoomHelper
 class OnThisDayCardView(context: Context) : DefaultFeedCardView<OnThisDayCard>(context), CardFooterView.Callback {
 
     private val binding = ViewCardOnThisDayBinding.inflate(LayoutInflater.from(context), this, true)
-    private val funnel = FeedFunnel(WikipediaApp.instance)
-    private val bottomSheetPresenter = ExclusiveBottomSheetPresenter()
     private var age = 0
 
     init {
@@ -41,7 +32,6 @@ class OnThisDayCardView(context: Context) : DefaultFeedCardView<OnThisDayCard>(c
 
     override fun onFooterClicked() {
         card?.let {
-            funnel.cardClicked(CardType.ON_THIS_DAY, it.wikiSite().languageCode)
             val options = ActivityOptions.makeSceneTransitionAnimation(context as Activity,
                 binding.cardHeader.titleView, context.getString(R.string.transition_on_this_day))
             context.startActivity(OnThisDayActivity.newIntent(context, age, -1,
@@ -90,7 +80,6 @@ class OnThisDayCardView(context: Context) : DefaultFeedCardView<OnThisDayCard>(c
     private fun onCardClicked(view: View) {
         card?.let {
             val isYearClicked = view.id == R.id.year
-            funnel.cardClicked(CardType.ON_THIS_DAY, it.wikiSite().languageCode)
             val options = ActivityOptions.makeSceneTransitionAnimation(context as Activity,
                 binding.cardHeader.titleView, context.getString(R.string.transition_on_this_day))
             context.startActivity(OnThisDayActivity.newIntent(context, age, if (isYearClicked) it.year() else -1, it.wikiSite(),
@@ -101,99 +90,67 @@ class OnThisDayCardView(context: Context) : DefaultFeedCardView<OnThisDayCard>(c
 
     private fun updateOtdEventUI(card: OnThisDayCard) {
         binding.eventLayout.pagesPager.visibility = GONE
-        card.pages()?.let { pages ->
-            binding.eventLayout.onThisDayPage.root.visibility = VISIBLE
-            val chosenPage = pages.find { it.thumbnailUrl != null }
-            chosenPage?.let { page ->
-                if (page.thumbnailUrl.isNullOrEmpty()) {
-                    binding.eventLayout.onThisDayPage.imageContainer.visibility = GONE
-                } else {
-                    binding.eventLayout.onThisDayPage.imageContainer.visibility = VISIBLE
-                    binding.eventLayout.onThisDayPage.image.loadImage(Uri.parse(page.thumbnailUrl))
-                    ImageZoomHelper.setViewZoomable(binding.eventLayout.onThisDayPage.image)
-                }
-                binding.eventLayout.onThisDayPage.description.text = page.description
-                binding.eventLayout.onThisDayPage.description.visibility =
-                    if (page.description.isNullOrEmpty()) GONE else VISIBLE
-                binding.eventLayout.onThisDayPage.title.maxLines =
-                    if (page.description.isNullOrEmpty()) 2 else 1
-                binding.eventLayout.onThisDayPage.title.text = StringUtil.fromHtml(page.displayTitle)
-                binding.eventLayout.onThisDayPage.root.setOnClickListener {
-                    callback?.onSelectPage(card,
-                        HistoryEntry(page.getPageTitle(card.wikiSite()), HistoryEntry.SOURCE_ON_THIS_DAY_CARD),
-                        TransitionUtil.getSharedElements(context, binding.eventLayout.onThisDayPage.image)
-                    )
-                }
-                binding.eventLayout.onThisDayPage.root.setOnLongClickListener { view ->
-                    if (ImageZoomHelper.isZooming) {
-                        ImageZoomHelper.dispatchCancelEvent(binding.eventLayout.onThisDayPage.root)
-                    } else {
-                        val pageTitle = page.getPageTitle(card.wikiSite())
-                        val entry = HistoryEntry(pageTitle, HistoryEntry.SOURCE_ON_THIS_DAY_CARD)
-                        LongPressMenu(view, true, object : LongPressMenu.Callback {
-                            override fun onOpenLink(entry: HistoryEntry) {
-                                callback?.onSelectPage(
-                                    card,
-                                    entry,
-                                    TransitionUtil.getSharedElements(
-                                        context,
-                                        binding.eventLayout.onThisDayPage.image
-                                    )
-                                )
-                            }
-
-                            override fun onOpenInNewTab(entry: HistoryEntry) {
-                                callback?.onSelectPage(card, entry, true)
-                            }
-
-                            override fun onAddRequest(entry: HistoryEntry, addToDefault: Boolean) {
-                                if (addToDefault) {
-                                    ReadingListBehaviorsUtil.addToDefaultList(
-                                        context as AppCompatActivity, entry.title,
-                                        InvokeSource.ON_THIS_DAY_CARD_BODY
-                                    ) { readingListId ->
-                                        bottomSheetPresenter.show(
-                                            (context as AppCompatActivity).supportFragmentManager,
-                                            MoveToReadingListDialog.newInstance(
-                                                readingListId,
-                                                entry.title,
-                                                InvokeSource.ON_THIS_DAY_CARD_BODY
-                                            )
-                                        )
-                                    }
-                                } else {
-                                    bottomSheetPresenter.show(
-                                        (context as AppCompatActivity).supportFragmentManager,
-                                        AddToReadingListDialog.newInstance(
-                                            entry.title,
-                                            InvokeSource.ON_THIS_DAY_CARD_BODY
-                                        )
-                                    )
-                                }
-                            }
-
-                            override fun onMoveRequest(
-                                page: ReadingListPage?,
-                                entry: HistoryEntry
-                            ) {
-                                page?.let {
-                                    bottomSheetPresenter.show(
-                                        (context as AppCompatActivity).supportFragmentManager,
-                                        MoveToReadingListDialog.newInstance(
-                                            it.listId,
-                                            entry.title,
-                                            InvokeSource.ON_THIS_DAY_CARD_BODY
-                                        )
-                                    )
-                                }
-                            }
-                        }).show(entry)
-                    }
-                    true
-                }
-            }
-        } ?: run {
+        if (card.pages().isEmpty()) {
             binding.eventLayout.onThisDayPage.root.visibility = GONE
+            return
+        }
+        binding.eventLayout.onThisDayPage.root.visibility = VISIBLE
+        val chosenPage = card.pages().find { it.thumbnailUrl != null }
+        chosenPage?.let { page ->
+            if (page.thumbnailUrl.isNullOrEmpty()) {
+                binding.eventLayout.onThisDayPage.imageContainer.visibility = GONE
+            } else {
+                binding.eventLayout.onThisDayPage.imageContainer.visibility = VISIBLE
+                binding.eventLayout.onThisDayPage.image.loadImage(Uri.parse(page.thumbnailUrl))
+                ImageZoomHelper.setViewZoomable(binding.eventLayout.onThisDayPage.image)
+            }
+            binding.eventLayout.onThisDayPage.description.text = page.description
+            binding.eventLayout.onThisDayPage.description.visibility =
+                if (page.description.isNullOrEmpty()) GONE else VISIBLE
+            binding.eventLayout.onThisDayPage.title.maxLines =
+                if (page.description.isNullOrEmpty()) 2 else 1
+            binding.eventLayout.onThisDayPage.title.text = StringUtil.fromHtml(page.displayTitle)
+            binding.eventLayout.onThisDayPage.root.setOnClickListener {
+                callback?.onSelectPage(card,
+                    HistoryEntry(page.getPageTitle(card.wikiSite()), HistoryEntry.SOURCE_ON_THIS_DAY_CARD),
+                    TransitionUtil.getSharedElements(context, binding.eventLayout.onThisDayPage.image)
+                )
+            }
+            binding.eventLayout.onThisDayPage.root.setOnLongClickListener { view ->
+                if (ImageZoomHelper.isZooming) {
+                    ImageZoomHelper.dispatchCancelEvent(binding.eventLayout.onThisDayPage.root)
+                } else {
+                    val pageTitle = page.getPageTitle(card.wikiSite())
+                    val entry = HistoryEntry(pageTitle, HistoryEntry.SOURCE_ON_THIS_DAY_CARD)
+                    LongPressMenu(view, callback = object : LongPressMenu.Callback {
+                        override fun onOpenLink(entry: HistoryEntry) {
+                            callback?.onSelectPage(
+                                card,
+                                entry,
+                                TransitionUtil.getSharedElements(
+                                    context,
+                                    binding.eventLayout.onThisDayPage.image
+                                )
+                            )
+                        }
+
+                        override fun onOpenInNewTab(entry: HistoryEntry) {
+                            callback?.onSelectPage(card, entry, true)
+                        }
+
+                        override fun onAddRequest(entry: HistoryEntry, addToDefault: Boolean) {
+                            ReadingListBehaviorsUtil.addToDefaultList(context as Activity, entry.title, addToDefault, InvokeSource.ON_THIS_DAY_CARD_BODY)
+                        }
+
+                        override fun onMoveRequest(page: ReadingListPage?, entry: HistoryEntry) {
+                            page?.let {
+                                ReadingListBehaviorsUtil.moveToList(context as Activity, page.listId, entry.title, InvokeSource.ON_THIS_DAY_CARD_BODY)
+                            }
+                        }
+                    }).show(entry)
+                }
+                true
+            }
         }
     }
 }

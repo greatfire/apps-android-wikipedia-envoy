@@ -9,28 +9,32 @@ import android.widget.TextView
 import androidx.activity.viewModels
 import androidx.annotation.StringRes
 import androidx.core.view.isVisible
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.paging.LoadState
 import androidx.paging.LoadStateAdapter
-import androidx.paging.PagingDataAdapter
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import org.wikipedia.Constants
 import org.wikipedia.Constants.InvokeSource
 import org.wikipedia.R
 import org.wikipedia.activity.BaseActivity
+import org.wikipedia.adapter.PagingDataAdapterPatched
 import org.wikipedia.databinding.ActivityArchivedTalkPagesBinding
 import org.wikipedia.history.HistoryEntry
 import org.wikipedia.page.LinkMovementMethodExt
 import org.wikipedia.page.PageActivity
 import org.wikipedia.page.PageTitle
 import org.wikipedia.readinglist.database.ReadingList
-import org.wikipedia.richtext.RichTextUtil
-import org.wikipedia.util.*
+import org.wikipedia.util.FeedbackUtil
+import org.wikipedia.util.StringUtil
 import org.wikipedia.views.DrawableItemDecoration
 import org.wikipedia.views.PageItemView
+import org.wikipedia.views.ViewUtil
 import org.wikipedia.views.WikiErrorView
 
 class ArchivedTalkPagesActivity : BaseActivity() {
@@ -42,7 +46,7 @@ class ArchivedTalkPagesActivity : BaseActivity() {
     private val archivedTalkPagesConcatAdapter = archivedTalkPagesAdapter.withLoadStateHeaderAndFooter(archivedTalkPagesLoadHeader, archivedTalkPagesLoadFooter)
 
     private val itemCallback = ItemCallback()
-    private val viewModel: ArchivedTalkPagesViewModel by viewModels { ArchivedTalkPagesViewModel.Factory(intent.extras!!) }
+    private val viewModel: ArchivedTalkPagesViewModel by viewModels()
 
     public override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -53,36 +57,41 @@ class ArchivedTalkPagesActivity : BaseActivity() {
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
 
         binding.recyclerView.layoutManager = LinearLayoutManager(this)
-        binding.recyclerView.addItemDecoration(DrawableItemDecoration(this, R.attr.list_separator_drawable, drawStart = false, drawEnd = false))
+        binding.recyclerView.addItemDecoration(DrawableItemDecoration(this, R.attr.list_divider, drawStart = false, drawEnd = false))
         binding.recyclerView.adapter = archivedTalkPagesConcatAdapter
 
         lifecycleScope.launch {
-            viewModel.archivedTalkPagesFlow.collectLatest {
-                archivedTalkPagesAdapter.submitData(it)
-            }
-        }
-
-        lifecycleScope.launchWhenCreated {
-            archivedTalkPagesAdapter.loadStateFlow.collectLatest {
-                archivedTalkPagesLoadHeader.loadState = it.refresh
-                archivedTalkPagesLoadFooter.loadState = it.append
-                val showEmpty = (it.append is LoadState.NotLoading && it.append.endOfPaginationReached && archivedTalkPagesAdapter.itemCount == 0)
-                if (showEmpty) {
-                    archivedTalkPagesConcatAdapter.addAdapter(EmptyItemAdapter(R.string.archive_empty))
+            repeatOnLifecycle(Lifecycle.State.CREATED) {
+                launch {
+                    viewModel.archivedTalkPagesFlow.collectLatest {
+                        archivedTalkPagesAdapter.submitData(lifecycleScope, it)
+                    }
+                }
+                launch {
+                    archivedTalkPagesAdapter.loadStateFlow.collectLatest {
+                        archivedTalkPagesLoadHeader.loadState = it.refresh
+                        archivedTalkPagesLoadFooter.loadState = it.append
+                        val showEmpty = (it.append is LoadState.NotLoading && it.append.endOfPaginationReached && archivedTalkPagesAdapter.itemCount == 0)
+                        if (showEmpty) {
+                            archivedTalkPagesConcatAdapter.addAdapter(EmptyItemAdapter(R.string.archive_empty))
+                        }
+                    }
                 }
             }
         }
     }
 
     private fun setToolbarTitle(pageTitle: PageTitle) {
-        binding.toolbarTitle.text = StringUtil.fromHtml(getString(R.string.talk_archived_title, "<a href='#'>${StringUtil.removeNamespace(pageTitle.displayText)}</a>"))
-        binding.toolbarTitle.contentDescription = binding.toolbarTitle.text
-        binding.toolbarTitle.movementMethod = LinkMovementMethodExt { _ ->
-            val entry = HistoryEntry(TalkTopicsActivity.getNonTalkPageTitle(viewModel.pageTitle), HistoryEntry.SOURCE_ARCHIVED_TALK)
-            startActivity(PageActivity.newIntentForNewTab(this, entry, entry.title))
+        val title = StringUtil.fromHtml(getString(R.string.talk_archived_title, "<a href='#'>${StringUtil.removeNamespace(pageTitle.displayText)}</a>"))
+        ViewUtil.getTitleViewFromToolbar(binding.toolbar)?.let {
+            it.contentDescription = title
+            it.movementMethod = LinkMovementMethodExt { _ ->
+                val entry = HistoryEntry(TalkTopicsActivity.getNonTalkPageTitle(viewModel.pageTitle), HistoryEntry.SOURCE_ARCHIVED_TALK)
+                startActivity(PageActivity.newIntentForNewTab(this, entry, entry.title))
+            }
+            FeedbackUtil.setButtonTooltip(it)
         }
-        RichTextUtil.removeUnderlinesFromLinks(binding.toolbarTitle)
-        FeedbackUtil.setButtonLongPressToast(binding.toolbarTitle)
+        supportActionBar?.title = title
     }
 
     private inner class LoadingItemAdapter(private val retry: () -> Unit) : LoadStateAdapter<LoadingViewHolder>() {
@@ -117,7 +126,7 @@ class ArchivedTalkPagesActivity : BaseActivity() {
         }
     }
 
-    private inner class ArchivedTalkPagesAdapter : PagingDataAdapter<PageTitle, RecyclerView.ViewHolder>(ArchivedTalkPagesDiffCallback()) {
+    private inner class ArchivedTalkPagesAdapter : PagingDataAdapterPatched<PageTitle, RecyclerView.ViewHolder>(ArchivedTalkPagesDiffCallback()) {
         override fun onCreateViewHolder(parent: ViewGroup, pos: Int): ArchivedTalkPageItemHolder {
             val view = PageItemView<PageTitle>(this@ArchivedTalkPagesActivity)
             view.callback = itemCallback
@@ -183,11 +192,9 @@ class ArchivedTalkPagesActivity : BaseActivity() {
     }
 
     companion object {
-        const val EXTRA_TITLE = "talkTopicTitle"
-
         fun newIntent(context: Context, talkTopicTitle: PageTitle): Intent {
             return Intent(context, ArchivedTalkPagesActivity::class.java)
-                    .putExtra(EXTRA_TITLE, talkTopicTitle)
+                    .putExtra(Constants.ARG_TITLE, talkTopicTitle)
         }
     }
 }

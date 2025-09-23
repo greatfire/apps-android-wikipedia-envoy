@@ -1,78 +1,53 @@
 package org.wikipedia.feed.configure
 
 import android.os.Bundle
-import android.view.*
+import android.view.LayoutInflater
+import android.view.Menu
+import android.view.MenuInflater
+import android.view.MenuItem
+import android.view.MotionEvent
+import android.view.View
+import android.view.ViewGroup
+import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.MenuProvider
+import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers
-import io.reactivex.rxjava3.disposables.CompositeDisposable
-import io.reactivex.rxjava3.schedulers.Schedulers
-import org.wikipedia.Constants
+import kotlinx.coroutines.launch
 import org.wikipedia.R
 import org.wikipedia.WikipediaApp
-import org.wikipedia.analytics.FeedConfigureFunnel
 import org.wikipedia.auth.AccountUtil
 import org.wikipedia.databinding.FragmentFeedConfigureBinding
-import org.wikipedia.dataclient.ServiceFactory
-import org.wikipedia.dataclient.WikiSite
 import org.wikipedia.feed.FeedContentType
 import org.wikipedia.settings.Prefs
 import org.wikipedia.settings.SettingsActivity
+import org.wikipedia.util.Resource
 import org.wikipedia.util.log.L
 import org.wikipedia.views.DefaultViewHolder
 import org.wikipedia.views.DrawableItemDecoration
-import java.util.*
+import java.util.Collections
 
 class ConfigureFragment : Fragment(), MenuProvider, ConfigureItemView.Callback {
 
     private var _binding: FragmentFeedConfigureBinding? = null
     private val binding get() = _binding!!
+    private val viewModel: ConfigureViewModel by viewModels()
 
     private lateinit var itemTouchHelper: ItemTouchHelper
-    private lateinit var funnel: FeedConfigureFunnel
     private val orderedContentTypes = mutableListOf<FeedContentType>()
-    private val disposables = CompositeDisposable()
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         _binding = FragmentFeedConfigureBinding.inflate(inflater, container, false)
+        (requireActivity() as AppCompatActivity).setSupportActionBar(binding.toolbar)
         requireActivity().addMenuProvider(this, viewLifecycleOwner, Lifecycle.State.RESUMED)
 
         setupRecyclerView()
-        funnel = FeedConfigureFunnel(WikipediaApp.instance, WikipediaApp.instance.wikiSite,
-            requireActivity().intent.getIntExtra(Constants.INTENT_EXTRA_INVOKE_SOURCE, -1))
-
-        disposables.add(ServiceFactory.getRest(WikiSite("wikimedia.org")).feedAvailability
-            .subscribeOn(Schedulers.io())
-            .observeOn(AndroidSchedulers.mainThread())
-            .doAfterTerminate { prepareContentTypeList() }
-            .subscribe({ result ->
-                // apply the new availability rules to our content types
-                FeedContentType.NEWS.langCodesSupported.clear()
-                if (isLimitedToDomains(result.news)) {
-                    addDomainNamesAsLangCodes(FeedContentType.NEWS.langCodesSupported, result.news)
-                }
-                FeedContentType.ON_THIS_DAY.langCodesSupported.clear()
-                if (isLimitedToDomains(result.onThisDay)) {
-                    addDomainNamesAsLangCodes(FeedContentType.ON_THIS_DAY.langCodesSupported, result.onThisDay)
-                }
-                FeedContentType.TOP_READ_ARTICLES.langCodesSupported.clear()
-                if (isLimitedToDomains(result.mostRead)) {
-                    addDomainNamesAsLangCodes(FeedContentType.TOP_READ_ARTICLES.langCodesSupported, result.mostRead)
-                }
-                FeedContentType.FEATURED_ARTICLE.langCodesSupported.clear()
-                if (isLimitedToDomains(result.featuredArticle)) {
-                    addDomainNamesAsLangCodes(FeedContentType.FEATURED_ARTICLE.langCodesSupported, result.featuredArticle)
-                }
-                FeedContentType.FEATURED_IMAGE.langCodesSupported.clear()
-                if (isLimitedToDomains(result.featuredPicture)) {
-                    addDomainNamesAsLangCodes(FeedContentType.FEATURED_IMAGE.langCodesSupported, result.featuredPicture)
-                }
-                FeedContentType.saveState()
-            }) { caught -> L.e(caught) })
 
         return binding.root
     }
@@ -82,12 +57,21 @@ class ConfigureFragment : Fragment(), MenuProvider, ConfigureItemView.Callback {
         FeedContentType.saveState()
     }
 
-    override fun onDestroyView() {
-        disposables.clear()
-        if (orderedContentTypes.isNotEmpty()) {
-            funnel.done(orderedContentTypes)
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        viewLifecycleOwner.lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.CREATED) {
+                launch {
+                    viewModel.uiState.collect {
+                        when (it) {
+                            is Resource.Loading -> onLoading()
+                            is Resource.Success -> prepareContentTypeList()
+                            is Resource.Error -> onError(it.throwable)
+                        }
+                    }
+                }
+            }
         }
-        super.onDestroyView()
     }
 
     override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
@@ -97,15 +81,15 @@ class ConfigureFragment : Fragment(), MenuProvider, ConfigureItemView.Callback {
     override fun onMenuItemSelected(item: MenuItem): Boolean {
         return when (item.itemId) {
             R.id.menu_feed_configure_select_all -> {
-                FeedContentType.values().map { it.isEnabled = true }
+                FeedContentType.entries.map { it.isEnabled = true }
                 touch()
-                binding.contentTypesRecycler.adapter?.notifyDataSetChanged()
+                binding.contentTypesRecycler.adapter?.notifyItemRangeChanged(0, orderedContentTypes.size)
                 true
             }
             R.id.menu_feed_configure_deselect_all -> {
-                FeedContentType.values().map { it.isEnabled = false }
+                FeedContentType.entries.map { it.isEnabled = false }
                 touch()
-                binding.contentTypesRecycler.adapter?.notifyDataSetChanged()
+                binding.contentTypesRecycler.adapter?.notifyItemRangeChanged(0, orderedContentTypes.size)
                 true
             }
             R.id.menu_feed_configure_reset -> {
@@ -120,8 +104,10 @@ class ConfigureFragment : Fragment(), MenuProvider, ConfigureItemView.Callback {
     }
 
     private fun prepareContentTypeList() {
+        binding.progressBar.isVisible = false
+        binding.contentTypesRecycler.isVisible = true
         orderedContentTypes.clear()
-        orderedContentTypes.addAll(FeedContentType.values())
+        orderedContentTypes.addAll(FeedContentType.entries)
         orderedContentTypes.sortBy { it.order }
         // Remove items for which there are no available languages
         val i = orderedContentTypes.iterator()
@@ -144,7 +130,7 @@ class ConfigureFragment : Fragment(), MenuProvider, ConfigureItemView.Callback {
                 i.remove()
             }
         }
-        binding.contentTypesRecycler.adapter?.notifyDataSetChanged()
+        binding.contentTypesRecycler.adapter?.notifyItemRangeChanged(0, orderedContentTypes.size)
     }
 
     private fun setupRecyclerView() {
@@ -152,9 +138,19 @@ class ConfigureFragment : Fragment(), MenuProvider, ConfigureItemView.Callback {
         val adapter = ConfigureItemAdapter()
         binding.contentTypesRecycler.adapter = adapter
         binding.contentTypesRecycler.layoutManager = LinearLayoutManager(activity)
-        binding.contentTypesRecycler.addItemDecoration(DrawableItemDecoration(requireContext(), R.attr.list_separator_drawable))
+        binding.contentTypesRecycler.addItemDecoration(DrawableItemDecoration(requireContext(), R.attr.list_divider))
         itemTouchHelper = ItemTouchHelper(RearrangeableItemTouchHelperCallback(adapter))
         itemTouchHelper.attachToRecyclerView(binding.contentTypesRecycler)
+    }
+
+    private fun onLoading() {
+        binding.progressBar.isVisible = true
+        binding.contentTypesRecycler.isVisible = false
+    }
+
+    private fun onError(throwable: Throwable) {
+        L.e(throwable)
+        prepareContentTypeList()
     }
 
     override fun onCheckedChanged(contentType: FeedContentType, checked: Boolean) {
@@ -246,14 +242,6 @@ class ConfigureFragment : Fragment(), MenuProvider, ConfigureItemView.Callback {
     }
 
     companion object {
-        private fun isLimitedToDomains(domainNames: List<String>): Boolean {
-            return domainNames.isNotEmpty() && !domainNames[0].contains("*")
-        }
-
-        private fun addDomainNamesAsLangCodes(outList: MutableList<String>, domainNames: List<String>) {
-            outList.addAll(domainNames.map { WikiSite(it).languageCode })
-        }
-
         fun newInstance(): ConfigureFragment {
             return ConfigureFragment()
         }

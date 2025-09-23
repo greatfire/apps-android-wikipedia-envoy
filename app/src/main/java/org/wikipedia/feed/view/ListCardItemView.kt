@@ -8,18 +8,22 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.annotation.VisibleForTesting
 import androidx.constraintlayout.widget.ConstraintLayout
-import org.wikipedia.R
 import org.wikipedia.databinding.ViewListCardItemBinding
 import org.wikipedia.dataclient.page.PageSummary
+import org.wikipedia.extensions.coroutineScope
 import org.wikipedia.feed.model.Card
 import org.wikipedia.history.HistoryEntry
-import org.wikipedia.page.PageAvailableOfflineHandler.check
+import org.wikipedia.page.PageAvailableOfflineHandler
 import org.wikipedia.readinglist.LongPressMenu
 import org.wikipedia.readinglist.database.ReadingListPage
-import org.wikipedia.util.*
+import org.wikipedia.util.DeviceUtil
+import org.wikipedia.util.DimenUtil
+import org.wikipedia.util.ResourceUtil
+import org.wikipedia.util.StringUtil
+import org.wikipedia.util.TransitionUtil
 import org.wikipedia.views.ViewUtil
 
-class ListCardItemView @JvmOverloads constructor(context: Context, attrs: AttributeSet? = null) : ConstraintLayout(context, attrs) {
+class ListCardItemView(context: Context, attrs: AttributeSet? = null) : ConstraintLayout(context, attrs) {
     interface Callback {
         fun onSelectPage(card: Card, entry: HistoryEntry, openInNewBackgroundTab: Boolean)
         fun onSelectPage(card: Card, entry: HistoryEntry, sharedElements: Array<Pair<View, String>>)
@@ -48,7 +52,7 @@ class ListCardItemView @JvmOverloads constructor(context: Context, attrs: Attrib
         setPadding(0, DimenUtil.roundedDpToPx(topBottomPadding.toFloat()),
             0, DimenUtil.roundedDpToPx(topBottomPadding.toFloat()))
         DeviceUtil.setContextClickAsLongClick(this)
-        setBackgroundResource(ResourceUtil.getThemedAttributeId(context, R.attr.selectableItemBackground))
+        setBackgroundResource(ResourceUtil.getThemedAttributeId(context, androidx.appcompat.R.attr.selectableItemBackground))
 
         setOnClickListener {
             if (historyEntry != null && card != null) {
@@ -57,7 +61,7 @@ class ListCardItemView @JvmOverloads constructor(context: Context, attrs: Attrib
         }
 
         setOnLongClickListener { view ->
-            LongPressMenu(view, true, object : LongPressMenu.Callback {
+            LongPressMenu(view, callback = object : LongPressMenu.Callback {
                 override fun onOpenLink(entry: HistoryEntry) {
                     card?.let {
                         callback?.onSelectPage(it, entry, false)
@@ -99,7 +103,7 @@ class ListCardItemView @JvmOverloads constructor(context: Context, attrs: Attrib
         setTitle(StringUtil.fromHtml(entry.title.displayText))
         setSubtitle(entry.title.description)
         setImage(entry.title.thumbUrl)
-        check(entry.title) { available -> setViewsGreyedOut(!available) }
+        PageAvailableOfflineHandler.check(coroutineScope(), entry.title) { setViewsGreyedOut(!it) }
         return this
     }
 
@@ -109,7 +113,7 @@ class ListCardItemView @JvmOverloads constructor(context: Context, attrs: Attrib
             binding.viewListCardItemImage.visibility = GONE
         } else {
             binding.viewListCardItemImage.visibility = VISIBLE
-            ViewUtil.loadImageWithRoundedCorners(binding.viewListCardItemImage, url, true)
+            ViewUtil.loadImageWithRoundedCorners(binding.viewListCardItemImage, url)
         }
     }
 

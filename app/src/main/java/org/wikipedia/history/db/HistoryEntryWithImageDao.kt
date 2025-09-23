@@ -9,7 +9,8 @@ import org.wikipedia.search.SearchResult
 import org.wikipedia.search.SearchResults
 import org.wikipedia.util.StringUtil
 import java.text.DateFormat
-import java.util.*
+import java.util.Date
+import java.util.Locale
 
 @Dao
 interface HistoryEntryWithImageDao {
@@ -26,7 +27,7 @@ interface HistoryEntryWithImageDao {
     fun findEntriesBy(excludeSource1: Int, excludeSource2: Int, excludeSource3: Int, minTimeSpent: Int, limit: Int): List<HistoryEntryWithImage>
 
     fun findHistoryItem(searchQuery: String): SearchResults {
-        var normalizedQuery = StringUtils.stripAccents(searchQuery).lowercase(Locale.getDefault())
+        var normalizedQuery = StringUtils.stripAccents(searchQuery)
         if (normalizedQuery.isEmpty()) {
             return SearchResults()
         }
@@ -34,20 +35,19 @@ interface HistoryEntryWithImageDao {
             .replace("%", "\\%").replace("_", "\\_")
 
         val entries = findEntriesBySearchTerm("%$normalizedQuery%")
-                .filter { StringUtil.fromHtml(it.displayTitle).toString().lowercase().contains(normalizedQuery) }
+                .filter { StringUtil.fromHtml(it.displayTitle).contains(normalizedQuery, true) }
 
         return if (entries.isEmpty()) SearchResults()
         else SearchResults(entries.take(3).map { SearchResult(toHistoryEntry(it).title, SearchResult.SearchResultType.HISTORY) }.toMutableList())
     }
 
+    fun filterHistoryItemsWithoutTime(searchQuery: String = ""): List<HistoryEntry> {
+        return findEntriesBySearchTerm("%${normalizedQuery(searchQuery)}%").map { toHistoryEntry(it) }
+    }
+
     fun filterHistoryItems(searchQuery: String): List<Any> {
         val list = mutableListOf<Any>()
-        val normalizedQuery = StringUtils.stripAccents(searchQuery).lowercase(Locale.getDefault())
-            .replace("\\", "\\\\")
-            .replace("%", "\\%")
-            .replace("_", "\\_")
-
-        val entries = findEntriesBySearchTerm("%$normalizedQuery%")
+        val entries = findEntriesBySearchTerm("%${normalizedQuery(searchQuery)}%")
 
         for (i in entries.indices) {
             // Check the previous item, see if the times differ enough
@@ -77,11 +77,20 @@ interface HistoryEntryWithImageDao {
         return entries.map { toHistoryEntry(it) }
     }
 
+    private fun normalizedQuery(searchQuery: String): String {
+        return StringUtils.stripAccents(searchQuery).lowercase(Locale.getDefault())
+            .replace("\\", "\\\\")
+            .replace("%", "\\%")
+            .replace("_", "\\_")
+    }
+
     private fun toHistoryEntry(entryWithImage: HistoryEntryWithImage): HistoryEntry {
         val entry = HistoryEntry(entryWithImage.authority, entryWithImage.lang, entryWithImage.apiTitle,
             entryWithImage.displayTitle, 0, entryWithImage.namespace, entryWithImage.timestamp,
             entryWithImage.source, entryWithImage.timeSpentSec)
         entry.title.thumbUrl = entryWithImage.imageName
+        entry.title.description = entryWithImage.description
+
         return entry
     }
 

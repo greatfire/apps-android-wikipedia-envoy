@@ -9,7 +9,6 @@ import org.wikipedia.databinding.ViewListCardBinding
 import org.wikipedia.feed.model.Card
 import org.wikipedia.views.DrawableItemDecoration
 
-@Suppress("LeakingThis")
 abstract class ListCardView<T : Card?>(context: Context) : DefaultFeedCardView<T>(context) {
     interface Callback {
         fun onFooterClick(card: Card)
@@ -20,7 +19,7 @@ abstract class ListCardView<T : Card?>(context: Context) : DefaultFeedCardView<T
     init {
         binding.viewListCardList.layoutManager = LinearLayoutManager(context)
         binding.viewListCardList.addItemDecoration(
-            DrawableItemDecoration(context, R.attr.list_separator_drawable, drawStart = false, drawEnd = false)
+            DrawableItemDecoration(context, R.attr.list_divider, drawStart = false, drawEnd = false)
         )
         binding.viewListCardList.isNestedScrollingEnabled = false
     }

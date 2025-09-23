@@ -9,15 +9,17 @@ import android.os.Bundle
 import android.view.View
 import android.view.inputmethod.EditorInfo
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.view.isVisible
+import androidx.lifecycle.lifecycleScope
 import com.google.android.material.textfield.TextInputLayout
 import org.wikipedia.R
 import org.wikipedia.WikipediaApp
 import org.wikipedia.activity.BaseActivity
-import org.wikipedia.analytics.LoginFunnel
+import org.wikipedia.auth.AccountUtil
 import org.wikipedia.auth.AccountUtil.updateAccount
 import org.wikipedia.createaccount.CreateAccountActivity
 import org.wikipedia.databinding.ActivityLoginBinding
-import org.wikipedia.login.LoginClient.LoginFailedException
+import org.wikipedia.extensions.parcelableExtra
 import org.wikipedia.notifications.PollNotificationWorker
 import org.wikipedia.page.PageTitle
 import org.wikipedia.push.WikipediaFirebaseMessagingService.Companion.updateSubscription
@@ -25,6 +27,7 @@ import org.wikipedia.readinglist.sync.ReadingListSyncAdapter
 import org.wikipedia.settings.Prefs
 import org.wikipedia.util.DeviceUtil
 import org.wikipedia.util.FeedbackUtil
+import org.wikipedia.util.StringUtil
 import org.wikipedia.util.UriUtil.visitInExternalBrowser
 import org.wikipedia.util.log.L
 import org.wikipedia.views.NonEmptyValidator
@@ -33,7 +36,6 @@ class LoginActivity : BaseActivity() {
     private lateinit var binding: ActivityLoginBinding
     private lateinit var loginSource: String
     private var firstStepToken: String? = null
-    private var funnel: LoginFunnel = LoginFunnel(WikipediaApp.instance)
     private val loginClient = LoginClient()
     private val loginCallback = LoginCallback()
     private var shouldLogLogin = true
@@ -44,12 +46,10 @@ class LoginActivity : BaseActivity() {
             CreateAccountActivity.RESULT_ACCOUNT_CREATED -> {
                 binding.loginUsernameText.editText?.setText(it.data!!.getStringExtra(CreateAccountActivity.CREATE_ACCOUNT_RESULT_USERNAME))
                 binding.loginPasswordInput.editText?.setText(it.data?.getStringExtra(CreateAccountActivity.CREATE_ACCOUNT_RESULT_PASSWORD))
-                funnel.logCreateAccountSuccess()
                 FeedbackUtil.showMessage(this, R.string.create_account_account_created_toast)
                 doLogin()
             }
             CreateAccountActivity.RESULT_ACCOUNT_NOT_CREATED -> finish()
-            else -> funnel.logCreateAccountFailure()
         }
     }
 
@@ -78,13 +78,21 @@ class LoginActivity : BaseActivity() {
         }
 
         loginSource = intent.getStringExtra(LOGIN_REQUEST_SOURCE).orEmpty()
-        if (loginSource.isNotEmpty() && loginSource == LoginFunnel.SOURCE_SUGGESTED_EDITS) {
+        if (loginSource.isNotEmpty() && loginSource == SOURCE_SUGGESTED_EDITS) {
             Prefs.isSuggestedEditsHighestPriorityEnabled = true
+        }
+
+        if (AccountUtil.isTemporaryAccount) {
+            binding.footerContainer.tempAccountInfoContainer.isVisible = true
+            binding.footerContainer.tempAccountInfoText.text = StringUtil.fromHtml(getString(R.string.temp_account_login_status, AccountUtil.userName))
+        } else {
+            binding.footerContainer.tempAccountInfoContainer.isVisible = false
         }
 
         // always go to account creation before logging in, unless we arrived here through the
         // system account creation workflow
-        if (savedInstanceState == null && !intent.hasExtra(AccountManager.KEY_ACCOUNT_AUTHENTICATOR_RESPONSE)) {
+        if (savedInstanceState == null && !intent.hasExtra(AccountManager.KEY_ACCOUNT_AUTHENTICATOR_RESPONSE) &&
+                intent.getBooleanExtra(CREATE_ACCOUNT_FIRST, true)) {
             startCreateAccountActivity()
         }
 
@@ -101,7 +109,6 @@ class LoginActivity : BaseActivity() {
 
     override fun onStop() {
         binding.viewProgressBar.visibility = View.GONE
-        loginClient.cancel()
         super.onStop()
     }
 
@@ -113,8 +120,8 @@ class LoginActivity : BaseActivity() {
     private fun setAllViewsClickListener() {
         binding.loginButton.setOnClickListener { validateThenLogin() }
         binding.loginCreateAccountButton.setOnClickListener { startCreateAccountActivity() }
-        binding.inflateLoginAndAccount.privacyPolicyLink.setOnClickListener { FeedbackUtil.showPrivacyPolicy(this) }
-        binding.inflateLoginAndAccount.forgotPasswordLink.setOnClickListener {
+        binding.footerContainer.privacyPolicyLink.setOnClickListener { FeedbackUtil.showPrivacyPolicy(this) }
+        binding.footerContainer.forgotPasswordLink.setOnClickListener {
             val title = PageTitle("Special:PasswordReset", WikipediaApp.instance.wikiSite)
             visitInExternalBrowser(this, Uri.parse(title.uri))
         }
@@ -141,25 +148,15 @@ class LoginActivity : BaseActivity() {
 
     private fun logLoginStart() {
         if (shouldLogLogin && loginSource.isNotEmpty()) {
-            if (loginSource == LoginFunnel.SOURCE_EDIT) {
-                funnel.logStart(
-                        LoginFunnel.SOURCE_EDIT,
-                        intent.getStringExtra(EDIT_SESSION_TOKEN).orEmpty()
-                )
-            } else {
-                funnel.logStart(loginSource)
-            }
             shouldLogLogin = false
         }
     }
 
     private fun startCreateAccountActivity() {
-        funnel.logCreateAccountAttempt()
-        createAccountLauncher.launch(CreateAccountActivity.newIntent(this, funnel.sessionToken, loginSource))
+        createAccountLauncher.launch(CreateAccountActivity.newIntent(this, loginSource))
     }
 
     private fun onLoginSuccess() {
-        funnel.logSuccess()
         DeviceUtil.hideSoftKeyboard(this@LoginActivity)
         setResult(RESULT_LOGIN_SUCCESS)
 
@@ -169,6 +166,7 @@ class LoginActivity : BaseActivity() {
         Prefs.isReadingListSyncEnabled = true
         Prefs.readingListPagesDeletedIds = emptySet()
         Prefs.readingListsDeletedIds = emptySet()
+        Prefs.tempAccountWelcomeShown = false
         ReadingListSyncAdapter.manualSyncWithForce()
         PollNotificationWorker.schedulePollNotificationJob(this)
         Prefs.isPushNotificationOptionsSet = false
@@ -182,10 +180,11 @@ class LoginActivity : BaseActivity() {
         val twoFactorCode = getText(binding.login2faText)
         showProgressBar(true)
         if (twoFactorCode.isNotEmpty() && !firstStepToken.isNullOrEmpty()) {
-            loginClient.login(WikipediaApp.instance.wikiSite, username, password,
+            loginClient.login(lifecycleScope, WikipediaApp.instance.wikiSite, username, password,
                     null, twoFactorCode, firstStepToken!!, loginCallback)
         } else {
-            loginClient.request(WikipediaApp.instance.wikiSite, username, password, loginCallback)
+            loginClient.login(lifecycleScope, WikipediaApp.instance.wikiSite, username, password,
+                null, null, null, loginCallback)
         }
     }
 
@@ -193,13 +192,12 @@ class LoginActivity : BaseActivity() {
         override fun success(result: LoginResult) {
             showProgressBar(false)
             if (result.pass()) {
-                val response = intent.extras?.getParcelable<AccountAuthenticatorResponse>(AccountManager.KEY_ACCOUNT_AUTHENTICATOR_RESPONSE)
+                val response = intent.parcelableExtra<AccountAuthenticatorResponse>(AccountManager.KEY_ACCOUNT_AUTHENTICATOR_RESPONSE)
                 updateAccount(response, result)
                 onLoginSuccess()
             } else if (result.fail()) {
                 val message = result.message.orEmpty()
                 FeedbackUtil.showMessage(this@LoginActivity, message)
-                funnel.logError(message)
                 L.w("Login failed with result $message")
             }
         }
@@ -241,12 +239,22 @@ class LoginActivity : BaseActivity() {
         const val RESULT_LOGIN_SUCCESS = 1
         const val RESULT_LOGIN_FAIL = 2
         const val LOGIN_REQUEST_SOURCE = "login_request_source"
-        const val EDIT_SESSION_TOKEN = "edit_session_token"
+        const val CREATE_ACCOUNT_FIRST = "create_account_first"
+        const val SOURCE_NAV = "navigation"
+        const val SOURCE_EDIT = "edit"
+        const val SOURCE_SYSTEM = "system"
+        const val SOURCE_ONBOARDING = "onboarding"
+        const val SOURCE_SETTINGS = "settings"
+        const val SOURCE_SUBSCRIBE = "subscribe"
+        const val SOURCE_READING_MANUAL_SYNC = "reading_lists_manual_sync"
+        const val SOURCE_LOGOUT_BACKGROUND = "logout_background"
+        const val SOURCE_SUGGESTED_EDITS = "suggestededits"
+        const val SOURCE_TALK = "talk"
 
-        fun newIntent(context: Context, source: String, token: String? = null): Intent {
+        fun newIntent(context: Context, source: String, createAccountFirst: Boolean = true): Intent {
             return Intent(context, LoginActivity::class.java)
                     .putExtra(LOGIN_REQUEST_SOURCE, source)
-                    .putExtra(EDIT_SESSION_TOKEN, token)
+                    .putExtra(CREATE_ACCOUNT_FIRST, createAccountFirst)
         }
     }
 }

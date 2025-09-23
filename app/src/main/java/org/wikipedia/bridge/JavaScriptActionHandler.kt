@@ -6,8 +6,8 @@ import org.wikipedia.BuildConfig
 import org.wikipedia.R
 import org.wikipedia.WikipediaApp
 import org.wikipedia.auth.AccountUtil
-import org.wikipedia.dataclient.ServiceFactory
 import org.wikipedia.dataclient.WikiSite
+import org.wikipedia.json.JsonUtil
 import org.wikipedia.page.Namespace
 import org.wikipedia.page.PageTitle
 import org.wikipedia.page.PageViewModel
@@ -16,7 +16,8 @@ import org.wikipedia.util.DimenUtil
 import org.wikipedia.util.DimenUtil.densityScalar
 import org.wikipedia.util.DimenUtil.leadImageHeightForDevice
 import org.wikipedia.util.L10nUtil
-import java.util.*
+import java.util.Date
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 import kotlin.math.roundToInt
 
@@ -30,7 +31,11 @@ object JavaScriptActionHandler {
     }
 
     fun setTopMargin(top: Int): String {
-        return String.format(Locale.ROOT, "pcs.c1.Page.setMargins({ top:'%dpx', right:'%dpx', bottom:'%dpx', left:'%dpx' })", top + 16, 16, 48, 16)
+        return setMargins(16, top + 16, 16, 48)
+    }
+
+    fun setMargins(left: Int, top: Int, right: Int, bottom: Int): String {
+        return "pcs.c1.Page.setMargins({ top:'${top}px', right:'${right}px', bottom:'${bottom}px', left:'${left}px' })"
     }
 
     fun getTextSelection(): String {
@@ -66,7 +71,7 @@ object JavaScriptActionHandler {
     }
 
     fun scrollToAnchor(anchorLink: String): String {
-        val anchor = if (anchorLink.contains("#")) anchorLink.substring(anchorLink.indexOf("#") + 1) else anchorLink
+        val anchor = anchorLink.substringAfter('#')
         return "var el = document.getElementById('$anchor');" +
                 "window.scrollTo(0, el.offsetTop - (screen.height / 2));" +
                 "setTimeout(function(){ el.style.backgroundColor='#fc3';" +
@@ -76,6 +81,10 @@ object JavaScriptActionHandler {
 
     fun prepareToScrollTo(anchorLink: String, highlight: Boolean): String {
         return "pcs.c1.Page.prepareForScrollToAnchor(\"${anchorLink.replace("\"", "\\\"")}\", { highlight: $highlight } )"
+    }
+
+    fun removeHighlights(): String {
+        return "pcs.c1.Page.removeHighlightsFromHighlightedElements()"
     }
 
     fun setUp(context: Context, title: PageTitle, isPreview: Boolean, toolbarMargin: Int): String {
@@ -101,15 +110,15 @@ object JavaScriptActionHandler {
                 "       \"tableOther\": \"${res[R.string.table_other]}\"," +
                 "       \"tableClose\": \"${res[R.string.table_close]}\"" +
                 "   }," +
-                "   \"theme\": \"${app.currentTheme.funnelName}\"," +
+                "   \"theme\": \"${app.currentTheme.tag}\"," +
                 "   \"bodyFont\": \"$fontFamily\"," +
                 "   \"dimImages\": ${(app.currentTheme.isDark && Prefs.dimDarkModeImages)}," +
                 "   \"margins\": { \"top\": \"%dpx\", \"right\": \"%dpx\", \"bottom\": \"%dpx\", \"left\": \"%dpx\" }," +
                 "   \"leadImageHeight\": \"%dpx\"," +
-                "   \"areTablesInitiallyExpanded\": ${!Prefs.isCollapseTablesEnabled}," +
+                "   \"areTablesInitiallyExpanded\": ${isPreview || !Prefs.isCollapseTablesEnabled}," +
                 "   \"textSizeAdjustmentPercentage\": \"100%%\"," +
                 "   \"loadImages\": ${Prefs.isImageDownloadEnabled}," +
-                "   \"userGroups\": \"${AccountUtil.groups}\"," +
+                "   \"userGroups\": ${JsonUtil.encodeToString(AccountUtil.groups)}," +
                 "   \"isEditable\": ${!Prefs.readingFocusModeEnabled}" +
                 "}", topMargin, 16, 48, 16, leadImageHeight)
     }
@@ -122,13 +131,13 @@ object JavaScriptActionHandler {
         if (model.page == null) {
             return ""
         }
-        val showTalkLink = !(model.page!!.title.namespace() === Namespace.TALK)
+        val showTalkLink = model.page!!.title.namespace() !== Namespace.TALK
         val showMapLink = model.page!!.pageProperties.geo != null
         val editedDaysAgo = TimeUnit.MILLISECONDS.toDays(Date().time - model.page!!.pageProperties.lastModified.time)
+        val langCode = model.title?.wikiSite?.languageCode ?: WikipediaApp.instance.appOrSystemLanguageCode
 
         // TODO: page-library also supports showing disambiguation ("similar pages") links and
         // "page issues". We should be mindful that they exist, even if we don't want them for now.
-        val baseURL = ServiceFactory.getRestBasePath(model.title?.wikiSite!!).trimEnd('/')
         return "pcs.c1.Footer.add({" +
                 "   platform: \"android\"," +
                 "   clientVersion: \"${BuildConfig.VERSION_NAME}\"," +
@@ -137,6 +146,7 @@ object JavaScriptActionHandler {
                                 "pcs.c1.Footer.MenuItemType.lastEdited, " +
                                 (if (showTalkLink) "pcs.c1.Footer.MenuItemType.talkPage, " else "") +
                                 (if (showMapLink) "pcs.c1.Footer.MenuItemType.coordinate, " else "") +
+                                "pcs.c1.Footer.MenuItemType.pageIssues, " +
                 "               pcs.c1.Footer.MenuItemType.referenceList " +
                 "              ]," +
                 "       fragment: \"pcs-menu\"," +
@@ -144,17 +154,42 @@ object JavaScriptActionHandler {
                 "   }," +
                 "   readMore: { " +
                 "       itemCount: 3," +
-                "       baseURL: \"$baseURL\"," +
+                "       readMoreLazy: true," +
+                "       langCode: \"$langCode\"," +
                 "       fragment: \"pcs-read-more\"" +
                 "   }" +
                 "})"
     }
 
-    fun mobileWebChromeShim(): String {
+    fun appendReadMode(model: PageViewModel): String {
+        if (model.page == null) {
+            return ""
+        }
+        val apiBaseURL = model.title?.wikiSite!!.scheme() + "://" + model.title?.wikiSite!!.uri.authority!!.trimEnd('/')
+        val langCode = model.title?.wikiSite?.languageCode ?: WikipediaApp.instance.appOrSystemLanguageCode
+        return "pcs.c1.Footer.appendReadMore({" +
+                "   platform: \"android\"," +
+                "   clientVersion: \"${BuildConfig.VERSION_NAME}\"," +
+                "   readMore: { " +
+                "       itemCount: 3," +
+                "       apiBaseURL: \"$apiBaseURL\"," +
+                "       langCode: \"$langCode\"," +
+                "       fragment: \"pcs-read-more\"" +
+                "   }" +
+                "})"
+    }
+
+    fun mobileWebChromeShim(marginTop: Int, marginBottom: Int): String {
         return "(function() {" +
                 "let style = document.createElement('style');" +
-                "style.innerHTML = '.header-chrome { visibility: hidden; margin-top: 48px; height: 0px; } #page-secondary-actions { display: none; } .mw-footer { padding-bottom: 72px; } .page-actions-menu { display: none; } .minerva__tab-container { display: none; }';" +
+                "style.innerHTML = '.header-chrome { visibility: hidden; margin-top: ${marginTop}px; height: 0px; } #page-secondary-actions { display: none; } .mw-footer { padding-bottom: ${marginBottom}px; } .page-actions-menu { display: none; } .minerva__tab-container { display: none; } .banner-container { display: none; }';" +
                 "document.head.appendChild(style);" +
+                "})();"
+    }
+
+    fun mobileWebSetDarkMode(): String {
+        return "(function() {" +
+                "document.documentElement.classList.add('skin-theme-clientpref-night');" +
                 "})();"
     }
 

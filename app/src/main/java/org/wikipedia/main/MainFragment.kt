@@ -3,38 +3,44 @@ package org.wikipedia.main
 import android.Manifest
 import android.app.Activity
 import android.app.ActivityOptions
-import android.app.DownloadManager
 import android.content.ActivityNotFoundException
 import android.content.Intent
-import android.content.IntentFilter
 import android.content.pm.PackageManager
-import android.graphics.Bitmap
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.speech.RecognizerIntent
 import android.util.Pair
-import android.view.*
+import android.view.LayoutInflater
+import android.view.Menu
+import android.view.MenuInflater
+import android.view.MenuItem
+import android.view.View
+import android.view.ViewGroup
+import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
 import androidx.core.view.MenuProvider
+import androidx.core.view.descendants
+import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.viewpager2.widget.ViewPager2.OnPageChangeCallback
-import io.reactivex.rxjava3.disposables.CompositeDisposable
-import io.reactivex.rxjava3.functions.Consumer
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
 import org.wikipedia.BackPressedHandler
 import org.wikipedia.Constants
 import org.wikipedia.Constants.InvokeSource
 import org.wikipedia.R
 import org.wikipedia.WikipediaApp
+import org.wikipedia.activity.BaseActivity
 import org.wikipedia.activity.FragmentUtil.getCallback
-import org.wikipedia.analytics.LoginFunnel
-import org.wikipedia.analytics.ReadingListsFunnel
-import org.wikipedia.analytics.WatchlistFunnel
+import org.wikipedia.analytics.eventplatform.ReadingListsAnalyticsHelper
 import org.wikipedia.auth.AccountUtil
 import org.wikipedia.commons.FilePageActivity
+import org.wikipedia.concurrency.FlowEventBus
 import org.wikipedia.databinding.FragmentMainBinding
 import org.wikipedia.dataclient.WikiSite
 import org.wikipedia.events.ImportReadingListsEvent
@@ -58,31 +64,32 @@ import org.wikipedia.notifications.NotificationActivity
 import org.wikipedia.page.ExclusiveBottomSheetPresenter
 import org.wikipedia.page.PageActivity
 import org.wikipedia.page.PageTitle
-import org.wikipedia.page.linkpreview.LinkPreviewDialog
 import org.wikipedia.page.tabs.TabActivity
+import org.wikipedia.places.PlacesActivity
 import org.wikipedia.random.RandomActivity
-import org.wikipedia.readinglist.AddToReadingListDialog
-import org.wikipedia.readinglist.MoveToReadingListDialog
 import org.wikipedia.readinglist.ReadingListBehaviorsUtil
 import org.wikipedia.readinglist.ReadingListsFragment
 import org.wikipedia.search.SearchActivity
 import org.wikipedia.search.SearchFragment
 import org.wikipedia.settings.Prefs
 import org.wikipedia.settings.SettingsActivity
-import org.wikipedia.settings.SiteInfoClient.getMainPageForLang
+import org.wikipedia.staticdata.MainPageNameData
 import org.wikipedia.staticdata.UserAliasData
 import org.wikipedia.staticdata.UserTalkAliasData
 import org.wikipedia.suggestededits.SuggestedEditsTasksFragment
 import org.wikipedia.talk.TalkTopicsActivity
 import org.wikipedia.usercontrib.UserContribListActivity
-import org.wikipedia.util.*
+import org.wikipedia.util.DimenUtil
+import org.wikipedia.util.FeedbackUtil
+import org.wikipedia.util.ShareUtil
+import org.wikipedia.util.TabUtil
 import org.wikipedia.views.NotificationButtonView
 import org.wikipedia.views.TabCountsView
 import org.wikipedia.watchlist.WatchlistActivity
 import java.io.File
 import java.util.concurrent.TimeUnit
 
-class MainFragment : Fragment(), BackPressedHandler, MenuProvider, FeedFragment.Callback, HistoryFragment.Callback, LinkPreviewDialog.Callback, MenuNavTabDialog.Callback {
+class MainFragment : Fragment(), BackPressedHandler, MenuProvider, FeedFragment.Callback, HistoryFragment.Callback, MenuNavTabDialog.Callback {
     interface Callback {
         fun onTabChanged(tab: NavTab)
         fun updateToolbarElevation(elevate: Boolean)
@@ -94,11 +101,9 @@ class MainFragment : Fragment(), BackPressedHandler, MenuProvider, FeedFragment.
     private lateinit var notificationButtonView: NotificationButtonView
     private var tabCountsView: TabCountsView? = null
     private var showTabCountsAnimation = false
-    private val bottomSheetPresenter = ExclusiveBottomSheetPresenter()
     private val downloadReceiver = MediaDownloadReceiver()
     private val downloadReceiverCallback = MediaDownloadReceiverCallback()
     private val pageChangeCallback = PageChangeCallback()
-    private val disposables = CompositeDisposable()
     private var exclusiveTooltipRunnable: Runnable? = null
 
     // The permissions request API doesn't take a callback, so in the event we have to
@@ -121,17 +126,33 @@ class MainFragment : Fragment(), BackPressedHandler, MenuProvider, FeedFragment.
         _binding = FragmentMainBinding.inflate(inflater, container, false)
         requireActivity().addMenuProvider(this, viewLifecycleOwner, Lifecycle.State.RESUMED)
 
-        disposables.add(WikipediaApp.instance.bus.subscribe(EventBusConsumer()))
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.CREATED) {
+                FlowEventBus.events.collectLatest { event ->
+                    when (event) {
+                        is LoggedOutInBackgroundEvent -> {
+                            refreshContents()
+                        }
+                        is ImportReadingListsEvent -> {
+                            maybeShowImportReadingListsNewInstallDialog()
+                        }
+                    }
+                }
+            }
+        }
+
         binding.mainViewPager.isUserInputEnabled = false
         binding.mainViewPager.adapter = NavTabFragmentPagerAdapter(this)
         binding.mainViewPager.registerOnPageChangeCallback(pageChangeCallback)
-
-        FeedbackUtil.setButtonLongPressToast(binding.navMoreContainer)
-        binding.navMoreContainer.setOnClickListener {
-            bottomSheetPresenter.show(childFragmentManager, MenuNavTabDialog.newInstance())
+        binding.mainNavTabLayout.descendants.filterIsInstance<TextView>().forEach {
+            it.maxLines = 2
         }
 
         binding.mainNavTabLayout.setOnItemSelectedListener { item ->
+            if (item.order == NavTab.MORE.code()) {
+                ExclusiveBottomSheetPresenter.show(childFragmentManager, MenuNavTabDialog.newInstance())
+                return@setOnItemSelectedListener false
+            }
             val fragment = currentFragment
             if (fragment is FeedFragment && item.order == 0) {
                 fragment.scrollToTop()
@@ -141,6 +162,7 @@ class MainFragment : Fragment(), BackPressedHandler, MenuProvider, FeedFragment.
                 return@setOnItemSelectedListener true
             }
             binding.mainViewPager.setCurrentItem(item.order, false)
+            requireActivity().invalidateOptionsMenu()
             true
         }
 
@@ -156,18 +178,14 @@ class MainFragment : Fragment(), BackPressedHandler, MenuProvider, FeedFragment.
 
     override fun onPause() {
         super.onPause()
-        downloadReceiver.callback = null
-        requireContext().unregisterReceiver(downloadReceiver)
+        downloadReceiver.unregister(requireContext())
     }
 
     override fun onResume() {
         super.onResume()
-        requireContext().registerReceiver(downloadReceiver,
-                IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE))
-        downloadReceiver.callback = downloadReceiverCallback
+        downloadReceiver.register(requireContext(), downloadReceiverCallback)
         // reset the last-page-viewed timer
         Prefs.pageLastShown = 0
-        maybeShowWatchlistTooltip()
     }
 
     override fun onDestroyView() {
@@ -175,7 +193,6 @@ class MainFragment : Fragment(), BackPressedHandler, MenuProvider, FeedFragment.
         binding.mainViewPager.adapter = null
         binding.mainViewPager.unregisterOnPageChangeCallback(pageChangeCallback)
         _binding = null
-        disposables.dispose()
         super.onDestroyView()
     }
 
@@ -184,7 +201,7 @@ class MainFragment : Fragment(), BackPressedHandler, MenuProvider, FeedFragment.
             val searchQuery = data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)!![0]
             openSearchActivity(InvokeSource.VOICE, searchQuery, null)
         } else if (requestCode == Constants.ACTIVITY_REQUEST_GALLERY &&
-                resultCode == GalleryActivity.ACTIVITY_RESULT_PAGE_SELECTED) {
+                resultCode == GalleryActivity.ACTIVITY_RESULT_PAGE_SELECTED && data != null) {
             startActivity(data)
         } else if (requestCode == Constants.ACTIVITY_REQUEST_LOGIN &&
                 resultCode == LoginActivity.RESULT_LOGIN_SUCCESS) {
@@ -198,7 +215,8 @@ class MainFragment : Fragment(), BackPressedHandler, MenuProvider, FeedFragment.
                 return
             }
             if (resultCode == TabActivity.RESULT_NEW_TAB) {
-                val entry = HistoryEntry(PageTitle(getMainPageForLang(WikipediaApp.instance.appOrSystemLanguageCode),
+                val entry = HistoryEntry(PageTitle(
+                    MainPageNameData.valueFor(WikipediaApp.instance.appOrSystemLanguageCode),
                         WikipediaApp.instance.wikiSite), HistoryEntry.SOURCE_MAIN_PAGE)
                 startActivity(PageActivity.newIntentForNewTab(requireContext(), entry, entry.title))
             } else if (resultCode == TabActivity.RESULT_LOAD_FROM_BACKSTACK) {
@@ -268,7 +286,7 @@ class MainFragment : Fragment(), BackPressedHandler, MenuProvider, FeedFragment.
             tabCountsView!!.contentDescription = getString(R.string.menu_page_show_tabs)
             tabsItem.actionView = tabCountsView
             tabsItem.expandActionView()
-            FeedbackUtil.setButtonLongPressToast(tabCountsView!!)
+            FeedbackUtil.setButtonTooltip(tabCountsView!!)
             showTabCountsAnimation = false
         }
         val notificationMenuItem = menu.findItem(R.id.menu_notifications)
@@ -283,7 +301,7 @@ class MainFragment : Fragment(), BackPressedHandler, MenuProvider, FeedFragment.
             notificationButtonView.contentDescription = getString(R.string.notifications_activity_title)
             notificationMenuItem.actionView = notificationButtonView
             notificationMenuItem.expandActionView()
-            FeedbackUtil.setButtonLongPressToast(notificationButtonView)
+            FeedbackUtil.setButtonTooltip(notificationButtonView)
         } else {
             notificationMenuItem.isVisible = false
         }
@@ -297,6 +315,8 @@ class MainFragment : Fragment(), BackPressedHandler, MenuProvider, FeedFragment.
             openSearchActivity(InvokeSource.APP_SHORTCUTS, null, null)
         } else if (intent.hasExtra(Constants.INTENT_APP_SHORTCUT_CONTINUE_READING)) {
             startActivity(PageActivity.newIntent(requireActivity()))
+        } else if (intent.hasExtra(Constants.INTENT_APP_SHORTCUT_PLACES)) {
+            startActivity(PlacesActivity.newIntent(requireActivity()))
         } else if (intent.hasExtra(Constants.INTENT_EXTRA_DELETE_READING_LIST)) {
             goToTab(NavTab.READING_LISTS)
         } else if (intent.hasExtra(Constants.INTENT_EXTRA_GO_TO_MAIN_TAB) &&
@@ -305,10 +325,10 @@ class MainFragment : Fragment(), BackPressedHandler, MenuProvider, FeedFragment.
             goToTab(NavTab.of(intent.getIntExtra(Constants.INTENT_EXTRA_GO_TO_MAIN_TAB, NavTab.EXPLORE.code())))
         } else if (intent.hasExtra(Constants.INTENT_EXTRA_GO_TO_SE_TAB)) {
             goToTab(NavTab.of(intent.getIntExtra(Constants.INTENT_EXTRA_GO_TO_SE_TAB, NavTab.EDITS.code())))
+        } else if (intent.hasExtra(Constants.INTENT_EXTRA_PREVIEW_SAVED_READING_LISTS)) {
+            goToTab(NavTab.READING_LISTS)
         } else if (lastPageViewedWithin(1) && !intent.hasExtra(Constants.INTENT_RETURN_TO_MAIN) && WikipediaApp.instance.tabCount > 0) {
             startActivity(PageActivity.newIntent(requireContext()))
-        } else if (intent.hasExtra(Constants.INTENT_EXTRA_IMPORT_READING_LISTS)) {
-            goToTab(NavTab.READING_LISTS)
         }
     }
 
@@ -346,16 +366,11 @@ class MainFragment : Fragment(), BackPressedHandler, MenuProvider, FeedFragment.
     }
 
     override fun onFeedAddPageToList(entry: HistoryEntry, addToDefault: Boolean) {
-        if (addToDefault) {
-            ReadingListBehaviorsUtil.addToDefaultList(requireActivity(), entry.title, InvokeSource.FEED) { readingListId -> onFeedMovePageToList(readingListId, entry) }
-        } else {
-            bottomSheetPresenter.show(childFragmentManager, AddToReadingListDialog.newInstance(entry.title, InvokeSource.FEED))
-        }
+        ReadingListBehaviorsUtil.addToDefaultList(requireActivity(), entry.title, addToDefault, InvokeSource.FEED)
     }
 
     override fun onFeedMovePageToList(sourceReadingListId: Long, entry: HistoryEntry) {
-        bottomSheetPresenter.show(childFragmentManager,
-                MoveToReadingListDialog.newInstance(sourceReadingListId, entry.title, InvokeSource.FEED))
+        ReadingListBehaviorsUtil.moveToList(requireActivity(), sourceReadingListId, entry.title, InvokeSource.FEED)
     }
 
     override fun onFeedNewsItemSelected(card: NewsCard, view: NewsItemView) {
@@ -372,16 +387,13 @@ class MainFragment : Fragment(), BackPressedHandler, MenuProvider, FeedFragment.
     override fun onFeedShareImage(card: FeaturedImageCard) {
         val thumbUrl = card.baseImage().thumbnailUrl
         val fullSizeUrl = card.baseImage().original.source
-        object : ImagePipelineBitmapGetter(thumbUrl) {
-            override fun onSuccess(bitmap: Bitmap?) {
-                if (bitmap != null) {
-                    ShareUtil.shareImage(requireContext(), bitmap, File(thumbUrl).name,
-                            ShareUtil.getFeaturedImageShareSubject(requireContext(), card.age()), fullSizeUrl)
-                } else {
-                    FeedbackUtil.showMessage(this@MainFragment, getString(R.string.gallery_share_error, card.baseImage().title))
-                }
+        ImagePipelineBitmapGetter(requireContext(), thumbUrl) { bitmap ->
+            if (!isAdded) {
+                return@ImagePipelineBitmapGetter
             }
-        }[requireContext()]
+            ShareUtil.shareImage(lifecycleScope, requireContext(), bitmap, File(thumbUrl).name,
+                ShareUtil.getFeaturedImageShareSubject(requireContext(), card.age()), fullSizeUrl)
+        }
     }
 
     override fun onFeedDownloadImage(image: FeaturedImage) {
@@ -399,7 +411,7 @@ class MainFragment : Fragment(), BackPressedHandler, MenuProvider, FeedFragment.
     }
 
     override fun onLoginRequested() {
-        startActivityForResult(LoginActivity.newIntent(requireContext(), LoginFunnel.SOURCE_NAV),
+        startActivityForResult(LoginActivity.newIntent(requireContext(), LoginActivity.SOURCE_NAV),
                 Constants.ACTIVITY_REQUEST_LOGIN)
     }
 
@@ -416,34 +428,15 @@ class MainFragment : Fragment(), BackPressedHandler, MenuProvider, FeedFragment.
         startActivity(PageActivity.newIntentForCurrentTab(requireContext(), entry, entry.title))
     }
 
-    override fun onLinkPreviewLoadPage(title: PageTitle, entry: HistoryEntry, inNewTab: Boolean) {
-        if (inNewTab) {
-            startActivity(PageActivity.newIntentForNewTab(requireContext(), entry, entry.title))
-        } else {
-            startActivity(PageActivity.newIntentForCurrentTab(requireContext(), entry, entry.title))
-        }
-    }
-
-    override fun onLinkPreviewCopyLink(title: PageTitle) {
-        copyLink(title.uri)
-    }
-
-    override fun onLinkPreviewAddToList(title: PageTitle) {
-        bottomSheetPresenter.show(childFragmentManager, AddToReadingListDialog.newInstance(title, InvokeSource.LINK_PREVIEW_MENU))
-    }
-
-    override fun onLinkPreviewShareLink(title: PageTitle) {
-        ShareUtil.shareText(requireContext(), title)
-    }
-
     override fun onBackPressed(): Boolean {
         val fragment = currentFragment
         return fragment is BackPressedHandler && (fragment as BackPressedHandler).onBackPressed()
     }
 
     override fun usernameClick() {
-        val pageTitle = PageTitle(UserAliasData.valueFor(WikipediaApp.instance.languageState.appLanguageCode) + ":" + AccountUtil.userName, WikipediaApp.instance.wikiSite)
-        UriUtil.visitInExternalBrowser(requireContext(), Uri.parse(pageTitle.uri))
+        val pageTitle = PageTitle(UserAliasData.valueFor(WikipediaApp.instance.languageState.appLanguageCode), AccountUtil.userName, WikipediaApp.instance.wikiSite)
+        val entry = HistoryEntry(pageTitle, HistoryEntry.SOURCE_MAIN_PAGE)
+        startActivity(PageActivity.newIntentForNewTab(requireContext(), entry, pageTitle))
     }
 
     override fun loginClick() {
@@ -452,11 +445,9 @@ class MainFragment : Fragment(), BackPressedHandler, MenuProvider, FeedFragment.
 
     override fun talkClick() {
         if (AccountUtil.isLoggedIn) {
-            AccountUtil.userName?.let {
-                startActivity(TalkTopicsActivity.newIntent(requireActivity(),
-                        PageTitle(UserTalkAliasData.valueFor(WikipediaApp.instance.languageState.appLanguageCode), it,
-                                WikiSite.forLanguageCode(WikipediaApp.instance.appOrSystemLanguageCode)), InvokeSource.NAV_MENU))
-            }
+            startActivity(TalkTopicsActivity.newIntent(requireActivity(),
+                PageTitle(UserTalkAliasData.valueFor(WikipediaApp.instance.languageState.appLanguageCode), AccountUtil.userName,
+                    WikiSite.forLanguageCode(WikipediaApp.instance.appOrSystemLanguageCode)), InvokeSource.NAV_MENU))
         }
     }
 
@@ -466,19 +457,23 @@ class MainFragment : Fragment(), BackPressedHandler, MenuProvider, FeedFragment.
 
     override fun watchlistClick() {
         if (AccountUtil.isLoggedIn) {
-            WatchlistFunnel().logViewWatchlist()
             startActivity(WatchlistActivity.newIntent(requireActivity()))
         }
     }
 
     override fun contribsClick() {
         if (AccountUtil.isLoggedIn) {
-            startActivity(UserContribListActivity.newIntent(requireActivity(), AccountUtil.userName.orEmpty()))
+            startActivity(UserContribListActivity.newIntent(requireActivity(), AccountUtil.userName))
         }
     }
 
+    override fun donateClick(campaignId: String?) {
+        (requireActivity() as? BaseActivity)?.launchDonateDialog(campaignId = campaignId)
+    }
+
     fun setBottomNavVisible(visible: Boolean) {
-        binding.mainNavTabContainer.visibility = if (visible) View.VISIBLE else View.GONE
+        binding.mainNavTabBorder.isVisible = visible
+        binding.mainNavTabLayout.isVisible = visible
     }
 
     fun onGoOffline() {
@@ -508,11 +503,6 @@ class MainFragment : Fragment(), BackPressedHandler, MenuProvider, FeedFragment.
         } else {
             notificationButtonView.setUnreadCount(0)
         }
-    }
-
-    private fun copyLink(url: String) {
-        ClipboardUtil.setPlainText(requireContext(), text = url)
-        FeedbackUtil.showMessage(this, R.string.address_copied)
     }
 
     @Suppress("SameParameterValue")
@@ -560,8 +550,8 @@ class MainFragment : Fragment(), BackPressedHandler, MenuProvider, FeedFragment.
 
     private fun maybeShowImportReadingListsNewInstallDialog() {
         if (!Prefs.importReadingListsNewInstallDialogShown) {
-            ReadingListsFunnel().logReceiveStart()
-            AlertDialog.Builder(requireContext())
+            ReadingListsAnalyticsHelper.logReceiveStart(requireActivity())
+            MaterialAlertDialogBuilder(requireContext())
                 .setTitle(R.string.shareable_reading_lists_new_install_dialog_title)
                 .setMessage(R.string.shareable_reading_lists_new_install_dialog_content)
                 .setNegativeButton(R.string.shareable_reading_lists_new_install_dialog_got_it, null)
@@ -574,24 +564,11 @@ class MainFragment : Fragment(), BackPressedHandler, MenuProvider, FeedFragment.
         if (currentFragment !is SuggestedEditsTasksFragment && Prefs.showSuggestedEditsTooltip &&
                 Prefs.exploreFeedVisitCount >= SHOW_EDITS_SNACKBAR_COUNT) {
             enqueueTooltip {
-                FeedbackUtil.showTooltip(requireActivity(), binding.mainNavTabLayout.findViewById(NavTab.EDITS.id()),
+                FeedbackUtil.showTooltip(requireActivity(), binding.mainNavTabLayout.findViewById(NavTab.EDITS.id),
                     if (AccountUtil.isLoggedIn) getString(R.string.main_tooltip_text, AccountUtil.userName)
                     else getString(R.string.main_tooltip_text_v2), aboveOrBelow = true, autoDismiss = false).setOnBalloonDismissListener {
                             Prefs.showSuggestedEditsTooltip = false
                     }
-            }
-        }
-    }
-
-    private fun maybeShowWatchlistTooltip() {
-        if (Prefs.isWatchlistPageOnboardingTooltipShown &&
-                !Prefs.isWatchlistMainOnboardingTooltipShown && AccountUtil.isLoggedIn) {
-            enqueueTooltip {
-                FeedbackUtil.showTooltip(requireActivity(), binding.navMoreContainer, R.layout.view_watchlist_main_tooltip, 0, 0, aboveOrBelow = true, autoDismiss = false)
-                        .setOnBalloonDismissListener {
-                            WatchlistFunnel().logShowTooltipMore()
-                            Prefs.isWatchlistMainOnboardingTooltipShown = true
-                        }
             }
         }
     }
@@ -605,16 +582,6 @@ class MainFragment : Fragment(), BackPressedHandler, MenuProvider, FeedFragment.
     private inner class MediaDownloadReceiverCallback : MediaDownloadReceiver.Callback {
         override fun onSuccess() {
             FeedbackUtil.showMessage(requireActivity(), R.string.gallery_save_success)
-        }
-    }
-
-    private inner class EventBusConsumer : Consumer<Any> {
-        override fun accept(event: Any) {
-            if (event is LoggedOutInBackgroundEvent) {
-                refreshContents()
-            } else if (event is ImportReadingListsEvent) {
-                maybeShowImportReadingListsNewInstallDialog()
-            }
         }
     }
 

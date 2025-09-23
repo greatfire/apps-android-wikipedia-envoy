@@ -2,10 +2,7 @@ package org.wikipedia.readinglist.sync
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import org.wikipedia.dataclient.page.PageSummary
-import org.wikipedia.util.DateUtil
 import java.text.Normalizer
-import java.util.*
 
 @Serializable
 data class SyncedReadingLists(val lists: List<RemoteReadingList>? = null,
@@ -18,8 +15,6 @@ data class SyncedReadingLists(val lists: List<RemoteReadingList>? = null,
         @SerialName("default") val isDefault: Boolean = false,
         private val name: String,
         private val description: String? = null,
-        val created: String = DateUtil.iso8601DateFormat(Date()),
-        val updated: String = DateUtil.iso8601DateFormat(Date()),
         @SerialName("deleted") val isDeleted: Boolean = false
     ) {
         fun name(): String = Normalizer.normalize(name, Normalizer.Form.NFC)
@@ -32,9 +27,6 @@ data class SyncedReadingLists(val lists: List<RemoteReadingList>? = null,
         val listId: Long = -1,
         private val project: String,
         private val title: String,
-        val created: String = DateUtil.iso8601DateFormat(Date()),
-        val updated: String = DateUtil.iso8601DateFormat(Date()),
-        val summary: PageSummary? = null,
         @SerialName("deleted") val isDeleted: Boolean = false
     ) {
         fun project(): String = Normalizer.normalize(project, Normalizer.Form.NFC)
@@ -42,9 +34,7 @@ data class SyncedReadingLists(val lists: List<RemoteReadingList>? = null,
     }
 
     @Serializable
-    data class RemoteReadingListEntryBatch(val entries: List<RemoteReadingListEntry>) {
-        val batch: Array<RemoteReadingListEntry> = entries.toTypedArray()
-    }
+    data class RemoteReadingListEntryBatch(val batch: List<RemoteReadingListEntry>)
 
     @Serializable
     class RemoteIdResponse {

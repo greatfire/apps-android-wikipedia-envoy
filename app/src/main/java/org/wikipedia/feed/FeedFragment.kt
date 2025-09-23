@@ -7,15 +7,15 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import org.wikipedia.BackPressedHandler
 import org.wikipedia.Constants.InvokeSource
 import org.wikipedia.R
 import org.wikipedia.WikipediaApp
 import org.wikipedia.activity.FragmentUtil.getCallback
-import org.wikipedia.analytics.FeedFunnel
 import org.wikipedia.databinding.FragmentFeedBinding
 import org.wikipedia.feed.FeedCoordinatorBase.FeedUpdateListener
 import org.wikipedia.feed.configure.ConfigureActivity
@@ -31,6 +31,7 @@ import org.wikipedia.feed.random.RandomCardView
 import org.wikipedia.feed.topread.TopReadArticlesActivity
 import org.wikipedia.feed.topread.TopReadListCard
 import org.wikipedia.feed.view.FeedAdapter
+import org.wikipedia.feed.view.RegionalLanguageVariantSelectionDialog
 import org.wikipedia.history.HistoryEntry
 import org.wikipedia.language.AppLanguageLookUpTable
 import org.wikipedia.random.RandomActivity
@@ -39,7 +40,6 @@ import org.wikipedia.settings.Prefs
 import org.wikipedia.settings.SettingsActivity
 import org.wikipedia.settings.languages.WikipediaLanguagesActivity
 import org.wikipedia.util.FeedbackUtil
-import org.wikipedia.util.ResourceUtil
 import org.wikipedia.util.UriUtil
 
 class FeedFragment : Fragment(), BackPressedHandler {
@@ -51,8 +51,7 @@ class FeedFragment : Fragment(), BackPressedHandler {
     private val feedScrollListener = FeedScrollListener()
     private val callback get() = getCallback(this, Callback::class.java)
     private var app: WikipediaApp = WikipediaApp.instance
-    private var coordinator: FeedCoordinator = FeedCoordinator(app)
-    private var funnel: FeedFunnel = FeedFunnel(app)
+    private var coordinator: FeedCoordinator = FeedCoordinator(lifecycleScope, app)
     private var shouldElevateToolbar = false
 
     interface Callback {
@@ -95,7 +94,6 @@ class FeedFragment : Fragment(), BackPressedHandler {
         feedAdapter = FeedAdapter(coordinator, feedCallback)
         binding.feedView.adapter = feedAdapter
         binding.feedView.addOnScrollListener(feedScrollListener)
-        binding.swipeRefreshLayout.setColorSchemeResources(ResourceUtil.getThemedAttributeId(requireContext(), R.attr.colorAccent))
         binding.swipeRefreshLayout.setOnRefreshListener { refresh() }
         binding.customizeButton.setOnClickListener { showConfigureActivity(-1) }
         coordinator.setFeedUpdateListener(object : FeedUpdateListener {
@@ -120,6 +118,7 @@ class FeedFragment : Fragment(), BackPressedHandler {
                 if (feedAdapter.itemCount < 2) {
                     binding.emptyContainer.visibility = View.VISIBLE
                 } else {
+                    binding.emptyContainer.visibility = View.GONE
                     if (shouldUpdatePreviousCard) {
                         feedAdapter.notifyItemChanged(feedAdapter.itemCount - 1)
                     }
@@ -132,33 +131,14 @@ class FeedFragment : Fragment(), BackPressedHandler {
         return binding.root
     }
 
-    private fun showRemoveChineseVariantPrompt() {
-        if (app.languageState.appLanguageCodes.contains(AppLanguageLookUpTable.TRADITIONAL_CHINESE_LANGUAGE_CODE) &&
-            app.languageState.appLanguageCodes.contains(AppLanguageLookUpTable.SIMPLIFIED_CHINESE_LANGUAGE_CODE) &&
-            Prefs.shouldShowRemoveChineseVariantPrompt) {
-            AlertDialog.Builder(requireActivity())
-                .setTitle(R.string.dialog_of_remove_chinese_variants_from_app_lang_title)
-                .setMessage(R.string.dialog_of_remove_chinese_variants_from_app_lang_text)
-                .setPositiveButton(R.string.dialog_of_remove_chinese_variants_from_app_lang_edit) { _, _ -> showLanguagesActivity(InvokeSource.LANG_VARIANT_DIALOG) }
-                .setNegativeButton(R.string.dialog_of_remove_chinese_variants_from_app_lang_no, null)
-                .show()
-        }
-        Prefs.shouldShowRemoveChineseVariantPrompt = false
-    }
-
     override fun onResume() {
         super.onResume()
-        showRemoveChineseVariantPrompt()
-        funnel.enter()
+        maybeShowRegionalLanguageVariantDialog()
 
         // Explicitly invalidate the feed adapter, since it occasionally crashes the StaggeredGridLayout
-        // on certain devices. (TODO: investigate further)
+        // on certain devices.
+        // https://issuetracker.google.com/issues/188096921
         feedAdapter.notifyDataSetChanged()
-    }
-
-    override fun onPause() {
-        super.onPause()
-        funnel.exit()
     }
 
     override fun onDestroyView() {
@@ -200,11 +180,11 @@ class FeedFragment : Fragment(), BackPressedHandler {
     }
 
     fun refresh() {
-        funnel.refresh(coordinator.age)
         binding.emptyContainer.visibility = View.GONE
         coordinator.reset()
         feedAdapter.notifyDataSetChanged()
-        coordinator.more(app.wikiSite)
+        WikipediaApp.instance.resetWikiSite()
+        coordinator.more(WikipediaApp.instance.wikiSite)
     }
 
     fun updateHiddenCards() {
@@ -212,14 +192,7 @@ class FeedFragment : Fragment(), BackPressedHandler {
     }
 
     private inner class FeedCallback : FeedAdapter.Callback {
-        override fun onShowCard(card: Card?) {
-            card?.let {
-                funnel.cardShown(it.type(), getCardLanguageCode(it))
-            }
-        }
-
         override fun onRequestMore() {
-            funnel.requestMore(coordinator.age)
             binding.feedView.post {
                 if (isAdded) {
                     coordinator.incrementAge()
@@ -237,17 +210,11 @@ class FeedFragment : Fragment(), BackPressedHandler {
         }
 
         override fun onSelectPage(card: Card, entry: HistoryEntry, openInNewBackgroundTab: Boolean) {
-            callback?.let {
-                it.onFeedSelectPage(entry, openInNewBackgroundTab)
-                funnel.cardClicked(card.type(), getCardLanguageCode(card))
-            }
+            callback?.onFeedSelectPage(entry, openInNewBackgroundTab)
         }
 
         override fun onSelectPage(card: Card, entry: HistoryEntry, sharedElements: Array<Pair<View, String>>) {
-            callback?.let {
-                it.onFeedSelectPageWithAnimation(entry, sharedElements)
-                funnel.cardClicked(card.type(), getCardLanguageCode(card))
-            }
+            callback?.onFeedSelectPageWithAnimation(entry, sharedElements)
         }
 
         override fun onAddPageToList(entry: HistoryEntry, addToDefault: Boolean) {
@@ -271,7 +238,6 @@ class FeedFragment : Fragment(), BackPressedHandler {
             if (position < 0) {
                 return false
             }
-            funnel.dismissCard(card.type(), position)
             showDismissCardUndoSnackbar(card, position)
             return true
         }
@@ -285,10 +251,7 @@ class FeedFragment : Fragment(), BackPressedHandler {
         }
 
         override fun onNewsItemSelected(card: NewsCard, view: NewsItemView) {
-            callback?.let {
-                it.onFeedNewsItemSelected(card, view)
-                funnel.cardClicked(card.type(), card.wikiSite().languageCode)
-            }
+            callback?.onFeedNewsItemSelected(card, view)
         }
 
         override fun onShareImage(card: FeaturedImageCard) {
@@ -300,14 +263,10 @@ class FeedFragment : Fragment(), BackPressedHandler {
         }
 
         override fun onFeaturedImageSelected(card: FeaturedImageCard) {
-            callback?.let {
-                it.onFeaturedImageSelected(card)
-                funnel.cardClicked(card.type(), null)
-            }
+            callback?.onFeaturedImageSelected(card)
         }
 
         override fun onAnnouncementPositiveAction(card: Card, uri: Uri) {
-            funnel.cardClicked(card.type(), getCardLanguageCode(card))
             when {
                 uri.toString() == UriUtil.LOCAL_URL_LOGIN -> callback?.onLoginRequested()
                 uri.toString() == UriUtil.LOCAL_URL_SETTINGS -> requestLanguageChangeLauncher.launch(SettingsActivity.newIntent(requireContext()))
@@ -366,7 +325,7 @@ class FeedFragment : Fragment(), BackPressedHandler {
             val view = ConfigureItemLanguageDialogView(requireContext())
             val tempDisabledList = ArrayList(contentType.langCodesDisabled)
             view.setContentType(adapter.langList, tempDisabledList)
-            AlertDialog.Builder(requireContext())
+            MaterialAlertDialogBuilder(requireContext())
                 .setView(view)
                 .setTitle(contentType.titleId)
                 .setPositiveButton(R.string.feed_lang_selection_dialog_ok_button_text) { _, _ ->
@@ -375,7 +334,32 @@ class FeedFragment : Fragment(), BackPressedHandler {
                     refresh()
                 }
                 .setNegativeButton(R.string.feed_lang_selection_dialog_cancel_button_text, null)
-                .create()
+                .show()
+        }
+    }
+
+    private fun maybeShowRegionalLanguageVariantDialog() {
+        val deprecatedLanguageCodes = listOf(AppLanguageLookUpTable.TRADITIONAL_CHINESE_LANGUAGE_CODE, AppLanguageLookUpTable.SIMPLIFIED_CHINESE_LANGUAGE_CODE)
+        val primaryLanguage = WikipediaApp.instance.languageState.appLanguageCode
+        val remainingLanguages = WikipediaApp.instance.languageState.appLanguageCodes.toMutableList().apply {
+            remove(primaryLanguage)
+        }
+        if (deprecatedLanguageCodes.contains(primaryLanguage)) {
+             val dialog = RegionalLanguageVariantSelectionDialog(requireContext()).show()
+            dialog.setOnDismissListener {
+                refresh()
+            }
+        } else if (remainingLanguages.any(deprecatedLanguageCodes::contains)) {
+            MaterialAlertDialogBuilder(requireContext())
+                .setCancelable(false)
+                .setTitle(R.string.feed_language_variants_removal_secondary_dialog_title)
+                .setMessage(R.string.feed_language_variants_removal_secondary_dialog_message)
+                .setPositiveButton(R.string.feed_language_variants_removal_secondary_dialog_settings) { _, _ ->
+                    val list = RegionalLanguageVariantSelectionDialog.removeNonRegionalLanguageVariants()
+                    WikipediaApp.instance.languageState.setAppLanguageCodes(list)
+                    refresh()
+                    showLanguagesActivity(InvokeSource.FEED)
+                }
                 .show()
         }
     }

@@ -1,5 +1,6 @@
 package org.wikipedia.settings
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import org.wikipedia.json.JsonUtil
 import org.wikipedia.util.log.L
@@ -7,7 +8,6 @@ import org.wikipedia.util.log.L
 object RemoteConfig {
     private var curConfig: RemoteConfigImpl? = null
 
-    // If there's no pref set, just give back the empty JSON Object
     val config: RemoteConfigImpl
         get() {
             if (curConfig == null) {
@@ -21,15 +21,42 @@ object RemoteConfig {
             return curConfig!!
         }
 
-    fun updateConfig(configStr: String) {
-        Prefs.remoteConfigJson = configStr
+    fun updateConfig(config: RemoteConfigImpl) {
+        Prefs.remoteConfigJson = JsonUtil.encodeToString(config).orEmpty()
         curConfig = null
     }
 
     @Suppress("unused")
     @Serializable
     class RemoteConfigImpl {
-        val disableReadingListSync = false
-        val disableAnonEditing = false
+        val commonv1: RemoteConfigCommonV1? = null
+        val androidv1: RemoteConfigAndroidV1? = null
+
+        val disableReadingListSync
+            get() = androidv1?.disableReadingListSync == true
     }
+
+    @Suppress("unused")
+    @Serializable
+    class RemoteConfigCommonV1
+
+    @Suppress("unused")
+    @Serializable
+    class RemoteConfigAndroidV1 {
+        val disableReadingListSync = false
+        val hCaptcha: RemoteConfigHCaptcha? = null
+    }
+
+    @Suppress("unused")
+    @Serializable
+    class RemoteConfigHCaptcha(
+        val baseURL: String = "",
+        val jsSrc: String = "",
+        val endpoint: String = "",
+        @SerialName("assethost") val assetHost: String = "",
+        @SerialName("imghost") val imgHost: String = "",
+        @SerialName("reportapi") val reportApi: String = "",
+        val sentry: Boolean = false,
+        val siteKey: String = ""
+    )
 }

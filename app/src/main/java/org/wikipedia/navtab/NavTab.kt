@@ -4,12 +4,13 @@ import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.fragment.app.Fragment
 import org.wikipedia.R
+import org.wikipedia.activitytab.ActivityTabABTest
+import org.wikipedia.activitytab.ActivityTabFragment
 import org.wikipedia.feed.FeedFragment
 import org.wikipedia.history.HistoryFragment
 import org.wikipedia.model.EnumCode
 import org.wikipedia.readinglist.ReadingListsFragment
 import org.wikipedia.suggestededits.SuggestedEditsTasksFragment
-import org.wikipedia.usercontrib.ContributionsDashboardHelper
 
 enum class NavTab constructor(
     @StringRes val text: Int,
@@ -33,11 +34,12 @@ enum class NavTab constructor(
         }
     },
     EDITS(
-        if (ContributionsDashboardHelper.contributionsDashboardEnabled) R.string.nav_item_contribute
-        else R.string.nav_item_suggested_edits, R.id.nav_tab_edits, R.drawable.selector_nav_edits
+        if (ActivityTabABTest().isInTestGroup()) R.string.nav_item_activity else R.string.nav_item_suggested_edits,
+        R.id.nav_tab_edits,
+        if (ActivityTabABTest().isInTestGroup()) R.drawable.selector_nav_activity else R.drawable.selector_nav_edits
     ) {
         override fun newInstance(): Fragment {
-            return SuggestedEditsTasksFragment.newInstance()
+            return if (ActivityTabABTest().isInTestGroup()) ActivityTabFragment.newInstance() else SuggestedEditsTasksFragment.newInstance()
         }
     },
     MORE(R.string.nav_item_more, R.id.nav_tab_more, R.drawable.ic_menu_white_24dp) {

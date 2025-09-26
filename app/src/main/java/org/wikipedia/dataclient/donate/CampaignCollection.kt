@@ -16,7 +16,7 @@ import java.time.LocalDateTime
 
 object CampaignCollection {
 
-    private const val CAMPAIGN_VERSION = 1
+    private const val CAMPAIGN_VERSION = 2
 
     private const val CAMPAIGNS_URL = "https://donate.wikimedia.org/wiki/MediaWiki:AppsCampaignConfig.json?action=raw"
     private const val CAMPAIGNS_URL_DEBUG = "https://test.wikipedia.org/wiki/MediaWiki:AppsCampaignConfig.json?action=raw"
@@ -48,10 +48,10 @@ object CampaignCollection {
         return "${WikipediaApp.instance.appOrSystemLanguageCode}${GeoUtil.geoIPCountry}_${campaignId}_Android"
     }
 
-    fun addDonationResult(fromWeb: Boolean = false) {
-        Prefs.donationResults = Prefs.donationResults.plus(DonationResult(dateTime = LocalDateTime.now().toString(), fromWeb = fromWeb))
-        Prefs.isDonor = true
-        Prefs.hasDonorHistorySaved = true
+    fun addDonationResult(fromWeb: Boolean = false, amount: Float, currency: String, recurring: Boolean) {
+        Prefs.donationResults = Prefs.donationResults.plus(DonationResult(
+            LocalDateTime.now().toString(), fromWeb, amount, currency, recurring
+        ))
     }
 
     @Serializable

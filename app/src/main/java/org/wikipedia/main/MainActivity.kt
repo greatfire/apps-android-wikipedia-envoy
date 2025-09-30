@@ -85,9 +85,9 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
 
         // TODO: restore analytics logging
 
-//        override fun reportTestStarted(testedUrl: String, testedService: String) {
-//            // NO-OP
-//        }
+        override fun reportTestStarted(testedUrl: String, testedService: String) {
+            // NO-OP
+        }
 
         override fun reportTestSuccess(testedUrl: String, testedService: String, time: Long) {
             val sanitizedUrl = UrlUtil.sanitizeUrl(testedUrl)
@@ -527,23 +527,21 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
 
         // skip direct testing for now
         // envoy.addEnvoyUrl(WIKI_URL)
-//        testUrls.forEach{
-//            Log.d("EnvoySteve", "⛓️‍💥adding URL: ${it}")
-//            envoy.addEnvoyUrl(it)
-//        }
-        envoy.addEnvoyUrl("https://env.smcdonald.org:8443/")
+        testUrls.forEach{
+            Log.d("EnvoySteve", "⛓️‍💥adding URL: ${it}")
+            envoy.addEnvoyUrl(it)
+        }
 
+        val caUser = Secrets().getConcealedAuthUser(shortPackage)
+        val privKey = Secrets().getConcealedAuthPrivateKey(shortPackage)
+        val pubKey = Secrets().getConcealedAuthPublicKey(shortPackage)
 
-        val privKey = """-----BEGIN PRIVATE KEY-----
-            FAKE/FAKE
-            FAKE=
-            -----END PRIVATE KEY-----
-            """.trimMargin()
-        val pubKey = """-----BEGIN PUBLIC KEY-----
-            FAKE=
-            -----END PUBLIC KEY-----
-            """.trimMargin()
-        envoy.configureConcealedaAuth("envoy", pubKey, privKey);
+        Log.d("EnvoySteve", "shortPackage: $shortPackage")
+        Log.d("EnvoySteve", "user: $caUser")
+        Log.d("EnvoySteve", "priv: $privKey")
+        Log.d("EnvoySteve", "pub: $pubKey")
+
+        envoy.configureConcealedaAuth(caUser, pubKey, privKey);
 
         envoy.setCallback(mCallback)
         envoy.connect()

@@ -267,9 +267,10 @@ fun AboutWikipediaImage(
                         }
                     },
                 ),
-            painter = painterResource(R.drawable.w_nav_mark),
+            painter = painterResource(R.drawable.feed_header_wordmark),
             contentDescription = stringResource(R.string.about_logo_content_description),
         )
+        /*
         Image(
             modifier = Modifier
                 .padding(top = 4.dp)
@@ -281,6 +282,7 @@ fun AboutWikipediaImage(
             colorFilter = ColorFilter.tint(color = WikipediaTheme.colors.primaryColor),
             contentDescription = null,
         )
+        */
     }
 }
 

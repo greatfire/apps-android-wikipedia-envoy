@@ -15,13 +15,11 @@
 
         <ImageView
             android:id="@+id/main_toolbar_wordmark"
-            android:layout_width="128dp"
-            android:layout_height="128dp"
-            android:layout_marginStart="20dp"
+            android:layout_width="64dp"
+            android:layout_height="wrap_content"
             android:contentDescription="@null"
             android:visibility="gone"
-            app:srcCompat="@drawable/feed_header_wordmark"
-            app:tint="?attr/primary_color" />
+            app:srcCompat="@drawable/feed_header_wordmark" />
 
     </com.google.android.material.appbar.MaterialToolbar>
 

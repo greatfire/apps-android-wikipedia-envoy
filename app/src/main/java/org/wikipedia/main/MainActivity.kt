@@ -223,17 +223,24 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
 
         Log.d(TAG, "GET SECRETS: " + shortPackage)
 
-        val urlString: String = Secrets().getdefProxy(shortPackage)
-        val testUrls: List<String> = urlString.split(",")
-
         // disable passive testing by setting static flag
         EnvoyNetworking.passivelyTestDirect = false
         val envoy: EnvoyNetworking = EnvoyNetworking()
 
         envoy.setContext(mainActivityAppContext())
 
+        val caUser: String? = Secrets().getConcealedAuthUser(shortPackage)
+        val privKey: String? = Secrets().getConcealedAuthPrivateKey(shortPackage)
+        val pubKey: String? = Secrets().getConcealedAuthPublicKey(shortPackage)
+        if (!caUser.isNullOrEmpty() && !privKey.isNullOrEmpty() && !pubKey.isNullOrEmpty()) {
+            envoy.configureConcealedaAuth(caUser, pubKey, privKey)
+        }
+
         // comment out to skip direct testing
         envoy.addEnvoyUrl(WIKI_URL)
+
+        val urlString: String = Secrets().getdefProxy(shortPackage)
+        val testUrls: List<String> = urlString.split(",")
         testUrls.forEach{
             envoy.addEnvoyUrl(it)
         }

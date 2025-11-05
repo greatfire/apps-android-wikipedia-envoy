@@ -4,7 +4,13 @@
     <string name="app_name_prod">Wiki Unblocked</string>
     <string name="app_name_beta" tools:ignore="UnusedResources">Wiki Unblocked Beta</string>
     <string name="app_name_alpha" tools:ignore="UnusedResources">Wiki Unblocked Alpha</string>
-    <string name="wikipedia_app_faq">Wiki Unblocked FAQ</string>
-    <string name="about_description">About Wiki Unblocked</string>
+    <string name="wikiunblocked_app_faq">Wiki Unblocked FAQ</string>
+    <string name="about_description_wu">About Wiki Unblocked</string>
     <string name="crash_report_relaunch_or_quit">We\'re sorry, Wiki Unblocked has experienced an error and was terminated.\n\nWould you like to start over or quit?</string>
+    <string name="about_activity_title">About Wikipedia</string>
+    <string name="about_wuactivity_title">About Wiki Unblocked</string>
+    <string name="about_website_heading">Website</string>
+    <string name="about_website"><![CDATA[<a href="https://wikiunblocked.org/">Wiki Unblocked</a>]]></string>
+    <string name="privacy_policy_description">Wikipedia Privacy policy</string>
+    <string name="terms_of_use_description"> Wikipedia Terms of use</string>
 </resources>

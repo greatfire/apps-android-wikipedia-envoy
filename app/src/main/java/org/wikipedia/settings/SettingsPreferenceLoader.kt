@@ -56,6 +56,10 @@ internal class SettingsPreferenceLoader(fragment: PreferenceFragmentCompat) : Ba
             }
         }
 
+        findPreference(R.string.preference_key_about_wikiunblocked_app).onPreferenceClickListener = Preference.OnPreferenceClickListener {
+            activity.startActivity(Intent(activity, AboutActivityWu::class.java))
+            true
+        }
         findPreference(R.string.preference_key_about_wikipedia_app).onPreferenceClickListener = Preference.OnPreferenceClickListener {
             activity.startActivity(Intent(activity, AboutActivity::class.java))
             true
@@ -64,6 +68,7 @@ internal class SettingsPreferenceLoader(fragment: PreferenceFragmentCompat) : Ba
             Preference.OnPreferenceClickListener {
                 FeedbackUtil.composeEmail(
                     activity,
+                    emailAddress = "support@greatfire.org",
                     subject = "Android App ${BuildConfig.VERSION_NAME} Feedback",
                     body = deviceInformation()
                 )

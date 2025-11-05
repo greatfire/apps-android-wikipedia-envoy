@@ -367,6 +367,9 @@
             android:name=".settings.AboutActivity"/>
 
         <activity
+            android:name=".settings.AboutActivityWu"/>
+
+        <activity
             android:name=".games.onthisday.OnThisDayGameActivity"/>
 
         <activity

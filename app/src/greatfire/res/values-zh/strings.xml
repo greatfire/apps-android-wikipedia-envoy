@@ -4,7 +4,13 @@
     <string name="app_name_prod">自由Wiki</string>
     <string name="app_name_beta" tools:ignore="UnusedResources">自由Wiki Beta</string>
     <string name="app_name_alpha" tools:ignore="UnusedResources">自由Wiki Alpha</string>
-    <string name="wikipedia_app_faq">自由Wiki FAQ</string>
-    <string name="about_description">关于 自由Wiki</string>
+    <string name="wikiunblocked_app_faq">自由Wiki FAQ</string>
+    <string name="about_description_wu">关于 自由Wiki</string>
     <string name="crash_report_relaunch_or_quit">我们很抱歉，自由Wiki 发生了一个错误，并已终止。\n\n您要重启还是退出？</string>
+    <string name="about_activity_title">关于 维基百科</string>
+    <string name="about_wuactivity_title">关于 自由Wiki</string>
+    <string name="about_website_heading">網站</string>
+    <string name="about_website"><![CDATA[<a href="https://wikiunblocked.org/">自由Wiki</a>]]></string>
+    <string name="privacy_policy_description">维基百科隐私政策</string>
+    <string name="terms_of_use_description">维基百科使用条款</string>
 </resources>

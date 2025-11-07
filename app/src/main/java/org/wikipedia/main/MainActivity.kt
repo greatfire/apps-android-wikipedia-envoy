@@ -237,7 +237,7 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
         }
 
         // comment out to skip direct testing
-        envoy.addEnvoyUrl(WIKI_URL)
+        envoy.setDirectUrl(WIKI_URL)
 
         val urlString: String = Secrets().getdefProxy(shortPackage)
         val testUrls: List<String> = urlString.split(",")

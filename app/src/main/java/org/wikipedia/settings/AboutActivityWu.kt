@@ -172,6 +172,10 @@ fun AboutWuScreenBody(
             header = stringResource(R.string.about_website_heading),
             html = stringResource(R.string.about_website)
         )
+        WuLinkTextWithHeader(
+            header = stringResource(R.string.about_repository_heading),
+            html = stringResource(R.string.about_repository)
+        )
     }
 }
 

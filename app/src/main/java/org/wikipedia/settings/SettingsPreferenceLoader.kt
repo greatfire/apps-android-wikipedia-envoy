@@ -64,16 +64,6 @@ internal class SettingsPreferenceLoader(fragment: PreferenceFragmentCompat) : Ba
             activity.startActivity(Intent(activity, AboutActivity::class.java))
             true
         }
-        findPreference(R.string.preference_key_send_feedback).onPreferenceClickListener =
-            Preference.OnPreferenceClickListener {
-                FeedbackUtil.composeEmail(
-                    activity,
-                    emailAddress = "support@greatfire.org",
-                    subject = "Android App ${BuildConfig.VERSION_NAME} Feedback",
-                    body = deviceInformation()
-                )
-                true
-            }
         findPreference(R.string.preference_key_recommended_reading_list_enabled).onPreferenceClickListener = Preference.OnPreferenceClickListener {
             RecommendedReadingListEvent.submit("discover_click", "global_settings")
             if (Prefs.recommendedReadingListInterests.isEmpty() &&

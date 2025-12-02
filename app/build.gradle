@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     id 'com.android.application'
     id 'com.google.devtools.ksp'
@@ -6,6 +8,7 @@ plugins {
     id 'kotlin-parcelize'
     id 'kotlinx-serialization'
     id 'com.klaxit.hiddensecrets'
+    alias(libs.plugins.compose.compiler)
 }
 
 // Copy the signing.properties.sample file to ~/.sign/signing.properties and adjust the values.
@@ -18,8 +21,6 @@ static def computeVersionName(versionName, label) {
     return "${versionName}-${label}"
 }
 
-final JavaVersion JAVA_VERSION = JavaVersion.VERSION_17
-
 android {
 
     // Enable NDK build
@@ -29,25 +30,27 @@ android {
         }
     }
 
-    compileSdk 35
+    compileSdk = 36
 
     compileOptions {
-        coreLibraryDesugaringEnabled true
+        coreLibraryDesugaringEnabled = true
 
-        sourceCompatibility = JAVA_VERSION
-        targetCompatibility = JAVA_VERSION
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = JAVA_VERSION
+    kotlin {
+        compilerOptions {
+            jvmTarget = JvmTarget.JVM_17
+        }
     }
 
     defaultConfig {
         applicationId 'org.greatfire.wikiunblocked'
-        minSdk 26
-        targetSdk 35
-        versionName "5.0"
-        versionCode 100500
+        minSdk = 26
+        targetSdk = 36
+        versionName "6.0"
+        versionCode 100600
         testApplicationId 'org.greatfire.wikiunblocked.test'
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         testInstrumentationRunnerArguments clearPackageData: 'true'
@@ -68,11 +71,13 @@ android {
 
     testOptions {
         execution 'ANDROIDX_TEST_ORCHESTRATOR'
+        animationsDisabled = true
     }
 
     buildFeatures {
         viewBinding true
         buildConfig true
+        compose true
     }
 
     androidResources {
@@ -178,7 +183,6 @@ configurations {
 }
 
 apply from: '../gradle/src/test.gradle'
-apply from: '../gradle/src/checkstyle.gradle'
 apply from: '../gradle/src/ktlint.gradle'
 
 dependencies {
@@ -211,10 +215,6 @@ dependencies {
     implementation libs.work.runtime.ktx
     implementation libs.metrics.platform
 
-    implementation libs.glide
-    implementation libs.okhttp3.integration
-    ksp libs.glide.ksp
-
     implementation libs.okhttp.tls
     implementation libs.okhttp3.logging.interceptor
     implementation libs.retrofit
@@ -223,6 +223,7 @@ dependencies {
     implementation libs.photoview
     implementation libs.balloon
     implementation libs.retrofit2.kotlinx.serialization.converter
+    implementation(libs.paging.compose)
 
     implementation libs.android.sdk
     implementation libs.android.plugin.annotation.v9
@@ -300,14 +301,41 @@ dependencies {
     implementation files('libs/ok-ohttp-encapsulator-release.aar')
     implementation files('libs/lib-bhttp.jar')
 
+    // http-concealed-auth requirements
+    implementation 'org.bouncycastle:bcprov-jdk18on:1.77'
+    implementation 'org.bouncycastle:bcpkix-jdk18on:1.77'
+    implementation 'org.conscrypt:conscrypt-android:2.5.2'
+    implementation 'tech.kwik:kwik:0.8.13'
+    implementation 'org.eclipse.jetty:jetty-util:12.0.7'
+    implementation files('libs/HTTPSigAuth-1.0-SNAPSHOT.jar')
+
     // switch to local files if needed to support development
     implementation files('libs/cronet-debug.aar')
     implementation files('libs/envoy-debug.aar')
     implementation files('libs/IEnvoyProxy.aar')
-    // use maven dependencies to support automation
-    // implementation 'org.greatfire.envoy:cronet:108.0.5359.195'
-    // implementation 'org.greatfire:envoy:107.0.5304.150.5'
-    // implementation 'org.greatfire:IEnvoyProxy:1.5.0'
+
+    // Coil
+    implementation(libs.coil.compose)
+    implementation(libs.coil.network.okhttp)
+    implementation(libs.coil.gif)
+    implementation(libs.coil.svg)
+
+    // Compose Library
+    def composeBom = platform(libs.composeBom)
+    implementation(composeBom)
+    implementation(libs.compose.material3)
+    implementation(libs.compose.ui)
+    implementation(libs.compose.ui.tooling.preview)
+    debugImplementation(libs.compose.ui.tooling)
+    implementation(libs.compose.activity)
+    implementation(libs.compose.view.model)
+    implementation(libs.androidx.navigation.compose)
+
+    // Compose Test Library
+    androidTestImplementation(libs.compose.test)
+    androidTestImplementation(composeBom)
+    debugImplementation(libs.compose.debug.test)
+    debugImplementation(composeBom)
 }
 
 private setSigningConfigKey(config, Properties props) {

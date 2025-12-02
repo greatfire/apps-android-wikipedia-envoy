@@ -11,8 +11,9 @@ import org.greatfire.envoy.CronetNetworking
 import org.wikipedia.BuildConfig
 import org.wikipedia.R
 import org.wikipedia.activity.FragmentUtil
+import org.wikipedia.activitytab.ActivityTabABTest
+import org.wikipedia.analytics.eventplatform.ActivityTabEvent
 import org.wikipedia.analytics.eventplatform.BreadCrumbLogEvent
-import org.wikipedia.analytics.eventplatform.ContributionsDashboardEvent
 import org.wikipedia.analytics.eventplatform.DonorExperienceEvent
 import org.wikipedia.analytics.eventplatform.PlacesEvent
 import org.wikipedia.auth.AccountUtil
@@ -20,7 +21,7 @@ import org.wikipedia.databinding.ViewMainDrawerBinding
 import org.wikipedia.page.ExtendedBottomSheetDialogFragment
 import org.wikipedia.places.PlacesActivity
 import org.wikipedia.settings.Prefs
-import org.wikipedia.usercontrib.ContributionsDashboardHelper
+import org.wikipedia.suggestededits.SuggestedEditsTasksActivity
 import org.wikipedia.util.DimenUtil
 import org.wikipedia.util.ResourceUtil.getThemedColorStateList
 
@@ -33,6 +34,7 @@ class MenuNavTabDialog : ExtendedBottomSheetDialogFragment() {
         fun watchlistClick()
         fun contribsClick()
         fun donateClick(campaignId: String? = null)
+        fun yearInReviewClick()
     }
 
     private var _binding: ViewMainDrawerBinding? = null
@@ -40,6 +42,8 @@ class MenuNavTabDialog : ExtendedBottomSheetDialogFragment() {
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         _binding = ViewMainDrawerBinding.inflate(inflater, container, false)
+
+        binding.mainDrawerYearInReviewContainer.isVisible = Prefs.isYearInReviewEnabled
 
         binding.mainDrawerAccountContainer.setOnClickListener {
             BreadCrumbLogEvent.logClick(requireActivity(), binding.mainDrawerAccountContainer)
@@ -83,13 +87,20 @@ class MenuNavTabDialog : ExtendedBottomSheetDialogFragment() {
 
         binding.mainDrawerDonateContainer.setOnClickListener {
             BreadCrumbLogEvent.logClick(requireActivity(), binding.mainDrawerDonateContainer)
-            if (ContributionsDashboardHelper.contributionsDashboardEnabled) {
-                ContributionsDashboardEvent.logAction("donate_start_click", "more_menu", campaignId = ContributionsDashboardHelper.CAMPAIGN_ID)
-                callback()?.donateClick(campaignId = ContributionsDashboardHelper.CAMPAIGN_ID)
-            } else {
-                DonorExperienceEvent.logAction("donate_start_click", "more_menu")
-                callback()?.donateClick()
-            }
+            DonorExperienceEvent.logAction("donate_start_click", "more_menu")
+            callback()?.donateClick()
+            dismiss()
+        }
+
+        binding.mainDrawerYearInReviewContainer.setOnClickListener {
+            callback()?.yearInReviewClick()
+            dismiss()
+        }
+
+        binding.mainDrawerEditContainer.setOnClickListener {
+            BreadCrumbLogEvent.logClick(requireActivity(), binding.mainDrawerEditContainer)
+            ActivityTabEvent.submit(activeInterface = "more_menu", action = "edit_click")
+            startActivity(SuggestedEditsTasksActivity.newIntent(requireContext()))
             dismiss()
         }
 
@@ -142,12 +153,13 @@ class MenuNavTabDialog : ExtendedBottomSheetDialogFragment() {
             binding.mainDrawerContribsContainer.visibility = View.GONE
         }
 
+        binding.mainDrawerEditContainer.isVisible = ActivityTabABTest().isInTestGroup()
+
         // check proxy state
         if (BuildConfig.BUILD_TYPE == "debug") {
             binding.mainDrawerProxyContainer.visibility = View.GONE
             binding.mainDrawerValidContainer.visibility = View.VISIBLE
             binding.mainDrawerInvalidContainer.visibility = View.VISIBLE
-            binding.mainDrawerUpdateContainer.visibility = View.VISIBLE
             var validString = Prefs.validServices.toString().removePrefix("[").removeSuffix("]").replace(", ", "\n")
             if (!validString.isNullOrEmpty()) {
                 binding.mainDrawerValidText.text = validString
@@ -156,16 +168,12 @@ class MenuNavTabDialog : ExtendedBottomSheetDialogFragment() {
             if (!invalidString.isNullOrEmpty()) {
                 binding.mainDrawerInvalidText.text = invalidString
             }
-            var updateString = Prefs.updateMessages.toString().removePrefix("[").removeSuffix("]").replace(", ", "\n")
-            if (!updateString.isNullOrEmpty()) {
-                binding.mainDrawerUpdateText.text = updateString
-            }
         } else {
             binding.mainDrawerProxyContainer.visibility = View.VISIBLE
             binding.mainDrawerValidContainer.visibility = View.GONE
             binding.mainDrawerInvalidContainer.visibility = View.GONE
-            binding.mainDrawerUpdateContainer.visibility = View.GONE
-            if (CronetNetworking.cronetEngine() == null) {
+            // if (CronetNetworking.cronetEngine() == null) {
+            if (Prefs.validServices.isNullOrEmpty()) {
                 binding.mainDrawerProxyOn.visibility = View.GONE
                 binding.mainDrawerProxyOff.visibility = View.VISIBLE
             } else {

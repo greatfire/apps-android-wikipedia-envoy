@@ -5,11 +5,11 @@ import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import android.view.View
+import androidx.activity.addCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.view.ActionMode
 import androidx.appcompat.widget.Toolbar
-import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -19,23 +19,19 @@ import org.greatfire.wikiunblocked.Secrets
 import org.wikipedia.Constants
 import org.wikipedia.R
 import org.wikipedia.activity.SingleFragmentActivity
-import org.wikipedia.analytics.eventplatform.ContributionsDashboardEvent
 import org.wikipedia.analytics.eventplatform.ImageRecommendationsEvent
 import org.wikipedia.analytics.eventplatform.PatrollerExperienceEvent
-import org.wikipedia.auth.AccountUtil
 import org.wikipedia.databinding.ActivityMainBinding
 import org.wikipedia.dataclient.WikiSite
-import org.wikipedia.donate.DonorStatus
 import org.wikipedia.feed.FeedFragment
 import org.wikipedia.navtab.NavTab
 import org.wikipedia.onboarding.InitialOnboardingActivity
 import org.wikipedia.page.PageActivity
 import org.wikipedia.settings.Prefs
-import org.wikipedia.usercontrib.ContributionsDashboardHelper
+import org.wikipedia.util.DeviceUtil
 import org.wikipedia.util.DimenUtil
 import org.wikipedia.util.FeedbackUtil
 import org.wikipedia.util.ResourceUtil
-import org.wikipedia.views.DonorBadgeView
 
 class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callback {
 
@@ -70,33 +66,27 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
             val sanitizedUrl = UrlUtil.sanitizeUrl(testedUrl)
             Log.d(TAG, "URL: $sanitizedUrl VALID! TIME: $time ms")
 
-            // populate debug menu
-            if (BuildConfig.BUILD_TYPE == "debug" && !testedService.isNullOrEmpty()) {
+            if (!testedService.isNullOrEmpty()) {
                 validServices.add(testedService + " - " + sanitizedUrl)
-                Prefs.validServices = validServices
+                // populate debug menu
+                if (BuildConfig.BUILD_TYPE == "debug") {
+                    Prefs.validServices = validServices
+                }
             }
 
             if (EnvoyTransportType.DIRECT.name.equals(testedService)) {
                 Log.d(TAG, "DIRECT CONNECTION SUCCESSFUL")
                 // set flag so resuming activity doesn't trigger another envoy check
                 envoyUnused = true
-            } else {
-                mainScope.launch {
-                    if (waitingForEnvoy) {
-                        // when the first valid url is received, refresh ui
-                        waitingForEnvoy = false
+            }
 
-                        val fragment = mainActivityFragment()
-                        if (fragment is MainFragment) {
-                            Log.d(TAG, "FIRST VALID URL, REFRESH UI")
-                            fragment.refreshFragment()
-                        } else {
-                            Log.w(TAG, "UNEXPECTED FRAGMENT, CAN'T REFRESH")
-                        }
-                    } else {
-                        Log.d(TAG, "ADDITIONAL VALID URL, IGNORE")
-                    }
-                }
+            if (waitingForEnvoy) {
+                Log.d(TAG, "CONNECTION SUCCESSFUL, REFRESH UI")
+                // when the first valid url is received, refresh ui
+                waitingForEnvoy = false
+                refreshMainFragment()
+            } else {
+                Log.d(TAG, "ADDITIONAL VALID URL, IGNORE")
             }
         }
 
@@ -104,10 +94,12 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
             val sanitizedUrl = UrlUtil.sanitizeUrl(testedUrl)
             Log.d(TAG, "URL: $sanitizedUrl INVALID! TIME: $time ms")
 
-            // populate debug menu
-            if (BuildConfig.BUILD_TYPE == "debug" && !testedService.isNullOrEmpty()) {
+            if (!testedService.isNullOrEmpty()) {
                 invalidServices.add(testedService + " - " + sanitizedUrl)
-                Prefs.invalidServices = invalidServices
+                // populate debug menu
+                if (BuildConfig.BUILD_TYPE == "debug") {
+                    Prefs.invalidServices = invalidServices
+                }
             }
         }
 
@@ -115,16 +107,22 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
             val sanitizedUrl = UrlUtil.sanitizeUrl(testedUrl)
             Log.e(TAG, "URL: $sanitizedUrl BLOCKED! (RETRY LATER)")
 
-            // populate debug menu (add to invalid list)
-            if (BuildConfig.BUILD_TYPE == "debug" && !testedService.isNullOrEmpty()) {
+            if (!testedService.isNullOrEmpty()) {
                 invalidServices.add(testedService + " - " + sanitizedUrl)
-                Prefs.invalidServices = invalidServices
+                // populate debug menu
+                if (BuildConfig.BUILD_TYPE == "debug") {
+                    Prefs.invalidServices = invalidServices
+                }
             }
         }
 
         override fun reportOverallStatus(status: String, time: Long) {
             Log.d(TAG, "FINISHED! TIME: $time ms")
             Log.d(TAG, "STATUS: $status")
+
+            // envoy is finished, so reset flag in case we want to try again
+            waitingForEnvoy = false
+
             if (EnvoyTestStatus.BLOCKED.name.equals(status) && !envoyUnused) {
                 // all urls blocked due to previous failures, show dialog advising to
                 // retry later, but ignore if direct connection was successful
@@ -150,6 +148,16 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (!DeviceUtil.assertAppContext(this)) {
+            return
+        }
+
+        onBackPressedDispatcher.addCallback(this) {
+            if (fragment.onBackPressed()) {
+                return@addCallback
+            }
+            finish()
+        }
 
         // reset in onCreate, check in onResume
         envoyUnused = false
@@ -179,6 +187,18 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
         checkAndInitEnvoy()
     }
 
+    fun onRetryButton() {
+        if (validServices.isNullOrEmpty()) {
+            // even if these flags were set, something isn't working, so clear them
+            waitingForEnvoy = false
+            envoyUnused = false
+            checkAndInitEnvoy()
+        } else {
+            // envoy should be working, don't test again, just refresh to clear error
+            refreshMainFragment()
+        }
+    }
+
     fun checkAndInitEnvoy() {
 
         // TODO: onCreate also checks the following before onboarding, is that necessary here?
@@ -201,14 +221,14 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
             waitingForEnvoy = true
         }
 
+        validServices.clear()
+        invalidServices.clear()
         // clear debug ui
         if (BuildConfig.BUILD_TYPE == "debug") {
-            validServices.clear()
             Prefs.validServices = validServices
-            invalidServices.clear()
             Prefs.invalidServices = invalidServices
-            updateMessages.clear()
-            Prefs.updateMessages = updateMessages
+            // updateMessages.clear()
+            // Prefs.updateMessages = updateMessages
         }
         invalidateOptionsMenu()
 
@@ -217,17 +237,24 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
 
         Log.d(TAG, "GET SECRETS: " + shortPackage)
 
-        val urlString: String = Secrets().getdefProxy(shortPackage)
-        val testUrls: List<String> = urlString.split(",")
-
         // disable passive testing by setting static flag
         EnvoyNetworking.passivelyTestDirect = false
         val envoy: EnvoyNetworking = EnvoyNetworking()
 
         envoy.setContext(mainActivityAppContext())
 
+        val caUser: String? = Secrets().getConcealedAuthUser(shortPackage)
+        val privKey: String? = Secrets().getConcealedAuthPrivateKey(shortPackage)
+        val pubKey: String? = Secrets().getConcealedAuthPublicKey(shortPackage)
+        if (!caUser.isNullOrEmpty() && !privKey.isNullOrEmpty() && !pubKey.isNullOrEmpty()) {
+            envoy.configureConcealedaAuth(caUser, pubKey, privKey)
+        }
+
         // comment out to skip direct testing
-        envoy.addEnvoyUrl(WIKI_URL)
+        envoy.setDirectUrl(WIKI_URL)
+
+        val urlString: String = Secrets().getdefProxy(shortPackage)
+        val testUrls: List<String> = urlString.split(",")
         testUrls.forEach{
             envoy.addEnvoyUrl(it)
         }
@@ -244,38 +271,18 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
         if (tab == NavTab.EXPLORE) {
             binding.mainToolbarWordmark.visibility = View.VISIBLE
             binding.mainToolbar.title = ""
-            binding.toolbarTitle.isVisible = false
-            binding.donorBadge.isVisible = false
             controlNavTabInFragment = false
         } else {
-            binding.toolbarTitle.isVisible = true
-            binding.donorBadge.isVisible = false
             if (tab == NavTab.SEARCH && Prefs.showSearchTabTooltip) {
                 FeedbackUtil.showTooltip(this, fragment.binding.mainNavTabLayout.findViewById(NavTab.SEARCH.id), getString(R.string.search_tab_tooltip), aboveOrBelow = true, autoDismiss = false)
                 Prefs.showSearchTabTooltip = false
             }
-            var titleText = getString(tab.text)
             if (tab == NavTab.EDITS) {
                 ImageRecommendationsEvent.logImpression("suggested_edit_dialog")
                 PatrollerExperienceEvent.logImpression("suggested_edits_dialog")
-                if (ContributionsDashboardHelper.contributionsDashboardEnabled) {
-                    titleText = if (AccountUtil.isLoggedIn) {
-                        AccountUtil.userName
-                    } else {
-                        getString(R.string.contributions_dashboard_logged_out_user)
-                    }
-                    binding.donorBadge.disableClickForDonor()
-                    binding.donorBadge.setup(object : DonorBadgeView.Callback {
-                        override fun onBecomeDonorClick() {
-                            ContributionsDashboardEvent.logAction("donate_start_click", "contrib_dashboard", campaignId = ContributionsDashboardHelper.CAMPAIGN_ID)
-                            launchDonateDialog(campaignId = ContributionsDashboardHelper.CAMPAIGN_ID)
-                        }
-                    })
-                    binding.donorBadge.isVisible = DonorStatus.donorStatus() != DonorStatus.UNKNOWN
-                }
             }
             binding.mainToolbarWordmark.visibility = View.GONE
-            binding.toolbarTitle.text = titleText
+            binding.mainToolbar.setTitle(tab.text)
             controlNavTabInFragment = true
         }
         fragment.requestUpdateToolbarElevation()
@@ -313,13 +320,6 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
 
     override fun onGoOnline() {
         fragment.onGoOnline()
-    }
-
-    override fun onBackPressed() {
-        if (fragment.onBackPressed()) {
-            return
-        }
-        super.onBackPressed()
     }
 
     private fun handleIntent(intent: Intent) {
@@ -370,7 +370,7 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
 
         private val validServices = mutableListOf<String>()
         private val invalidServices = mutableListOf<String>()
-        private val updateMessages = mutableListOf<String>()
+        // private val updateMessages = mutableListOf<String>()
 
         private var currentDialog: AlertDialog? = null
 
@@ -429,6 +429,15 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
 
         fun newIntent(context: Context): Intent {
             return Intent(context, MainActivity::class.java)
+        }
+
+        fun refreshMainFragment() {
+            val fragment = mainActivityFragment()
+            if (fragment is MainFragment) {
+                fragment.refreshFragment()
+            } else {
+                Log.w(TAG, "UNEXPECTED FRAGMENT, CAN'T REFRESH")
+            }
         }
     }
 }

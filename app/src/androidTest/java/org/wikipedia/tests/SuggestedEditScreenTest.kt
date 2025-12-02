@@ -39,20 +39,35 @@ class SuggestedEditScreenTest : BaseTest<MainActivity>(
             .clickOnSystemDialogWithText("Allow")
         navRobot
             .navigateToSuggestedEdits()
+        systemRobot
+            .dismissTooltip(activity)
+            .dismissTooltip(activity)
+            .dismissTooltip(activity)
+            .dismissTooltip(activity)
         suggestedEditsScreenRobot
-            .verifyEditsIsVisible()
+            .verifyContributionsIsVisible()
             .verifyViewsIsVisible()
             .verifyLastEditedIsVisible()
             .verifyEditQualityIsVisible()
-            .verifyLastDonatedIsVisible()
+        suggestedEditsScreenRobot
+            .verifyArticleDescriptionDoesNotExist(context)
+            .increaseContribution()
             .enterContributionScreen()
+        systemRobot
+            .clickOnSystemDialogWithText("No thanks")
             .pressBack()
+        suggestedEditsScreenRobot
             .clickArticleDescriptions()
-            .pressBack()
-            .clickImageCaptions()
             .pressBack()
             .clickImageTags()
             .pressBack()
+            .disableImageCaptionOnboarding()
+            .clickImageCaptions()
+            .pressBack()
             .clickSuggestedEdits()
+        navRobot
+            .navigateToMoreMenu()
+        loginRobot
+            .logOutUser(context)
     }
 }

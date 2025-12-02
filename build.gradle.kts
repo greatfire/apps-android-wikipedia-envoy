@@ -5,4 +5,5 @@ plugins {
     alias(libs.plugins.ksp.plugin) apply false
     alias(libs.plugins.gms.plugin) apply false
     alias(libs.plugins.klaxit.secrets) apply false
+    alias(libs.plugins.compose.compiler) apply  false
 }

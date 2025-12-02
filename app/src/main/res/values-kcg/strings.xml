@@ -14,6 +14,7 @@
   <string name="search_hint">Zop Wikipidya</string>
   <string name="search_hint_voice_search">Zop tyei a̱nwuat</string>
   <string name="search_hint_search_languages">Zop a̱lyem</string>
+  <string name="search_icon_content_description">Zop</string>
   <string name="filter_hint_filter_my_lists_and_articles">Cyam lis nung hu</string>
   <string name="nav_item_suggested_edits">Njhyuk</string>
   <string name="nav_item_more">Nkyang njhyang</string>
@@ -27,7 +28,7 @@
   <string name="page_error_back_to_main">Bwuok bai</string>
   <string name="error_back">Bwuok bai</string>
   <string name="error_next">Nat á̱zanson</string>
-  <string name="menu_clear_all_history">Kak nkhang gbangbang</string>
+  <string name="menu_clear_all_history" fuzzy="true">Kak nkhang gbangbang</string>
   <string name="history_item_deleted">Á̱ turung %s neet nkhang gbangbang na</string>
   <string name="history_items_deleted">Á̱ turung a̱yaati̱kut %d neet nkhang gbangbang na</string>
   <string name="history_item_delete_undo">Bwuok ndyo</string>
@@ -40,7 +41,7 @@
   <string name="wikimedia_commons">Wukimedia Komon</string>
   <string name="wikidata">Wukideita</string>
   <string name="dialog_title_clear_history">Kak nkhang gbangbang brauza</string>
-  <string name="dialog_message_clear_history">Si̱ huni na ti̱n a̱mgba̱m nkhang gbangbang brauza ang na, a̱wot ku nyim kuzang mbyiam na̱ shyia̱ ma̱ khwuk di̱ yong huni. A nwuak a̱cucuk a?</string>
+  <string name="dialog_message_clear_history" fuzzy="true">Si̱ huni na ti̱n a̱mgba̱m nkhang gbangbang brauza ang na, a̱wot ku nyim kuzang mbyiam na̱ shyia̱ ma̱ khwuk di̱ yong huni. A nwuak a̱cucuk a?</string>
   <string name="dialog_message_clear_history_yes">Ii</string>
   <string name="dialog_message_clear_history_no">Kaai</string>
   <string name="share_via">Ka̱u di̱n vak</string>
@@ -190,14 +191,8 @@
   <string name="privacy_policy_description">Kwambwat khap a̱pyia̱</string>
   <string name="terms_of_use_description">A̱yaaka̱nda̱n nyian ta̱m</string>
   <string name="about_wikipedia_url">https://en.wikipedia.org/wiki/Wikipedia:About</string>
-  <string name="offline_reading_and_data_url">https://www.mediawiki.org/wiki/Wikimedia_Apps/Android_FAQ#Offline_reading_and_data</string>
-  <string name="android_app_faq_url">https://www.mediawiki.org/wiki/Wikimedia_Apps/Android_FAQ</string>
-  <string name="android_app_request_an_account_url">https://en.wikipedia.org/wiki/Wikipedia:Request_an_account</string>
-  <string name="android_app_edit_help_url" fuzzy="true">https://m.mediawiki.org/wiki/Wikimedia_Apps/Suggested_edits</string>
-  <string name="suggested_edits_image_tags_help_url" fuzzy="true">https://www.mediawiki.org/wiki/Wikimedia_Apps/Suggested_edits#Image_tags</string>
   <string name="about_libraries_heading">Á̱tutunkwambwat nang á̱ nyian ta̱m ma̱ng a̱mba</string>
   <string name="about_contributors_heading">Á̱nietnwuat</string>
-  <string name="about_contributors">&lt;a href=\"https://www.mediawiki.org/wiki/Wikimedia_Apps/Team/Android\"&gt;Team page&lt;/a&gt;</string>
   <string name="about_translators_heading">Á̱nietbwan</string>
   <string name="about_translators_translatewiki">Á̱ ku bwuak ap wuni mbwak á̱nietbwan ba̱ yet á̱nietyei-a̱pyia̱ bya ma̱ &lt;a href=\"https://translatewiki.net\"&gt;translatewiki.net&lt;/a&gt;.</string>
   <string name="about_app_license_heading">Kwambwat yak</string>
@@ -574,7 +569,6 @@
   <string name="suggested_edits_feed_card_add_image_caption">Mbeang a̱pyia̱ a̱lyiat ghwughwu</string>
   <string name="suggested_edits_feed_card_translate_image_caption">Mbeang a̱pyia̱ a̱lyiat ghwughwu (%s)</string>
   <string name="suggested_edits_feed_card_add_image_tags">Mbeang a̱yaalama ghwughwu</string>
-  <string name="suggested_edits_snackbar_survey_action_text">Cyet a lii</string>
   <string name="suggested_edits_task_action_text_add">Mbeang</string>
   <string name="suggested_edits_task_action_text_translate">Bwuak</string>
   <string name="suggested_edits_image_captions">Pipyia̱ a̱lyiat ghwughwu</string>
@@ -712,14 +706,12 @@
   <string name="thank_dialog_positive_button_text">Ta̱m ma̱ng a̱gwai</string>
   <string name="thank_dialog_negative_button_text">Lyang</string>
   <string name="thank_success_message">Á̱ ta̱m ma̱ng \'A̱gwai\' ang na ma %s 👍</string>
-  <string name="watchlist_page_add_to_watchlist_snackbar">Á̱ mbeang %1$s ma̱ng peji a̱lyiat nhu hu di̱ lis saai-a̱ghyi ang hu %2$s.</string>
   <string name="watchlist_page_add_to_watchlist_snackbar_action">Shai</string>
   <string name="watchlist_page_add_to_watchlist_snackbar_period_permanently">ma̱ di̱ndi̱ng</string>
-  <string name="watchlist_page_add_to_watchlist_snackbar_period_for_one_week">mi̱ sati 1</string>
-  <string name="watchlist_page_add_to_watchlist_snackbar_period_for_one_month">mi̱ zwat 1</string>
-  <string name="watchlist_page_add_to_watchlist_snackbar_period_for_three_months">mi̱ zwát 3</string>
-  <string name="watchlist_page_add_to_watchlist_snackbar_period_for_six_months">mi̱ zwát 6</string>
-  <string name="watchlist_page_removed_from_watchlist_snackbar">Á̱ turung %s ma̱ng peji a̱lyiat nhu hu neet di̱ lis saai-a̱ghyi ang hu.</string>
+  <string name="watchlist_page_add_to_watchlist_snackbar_period_for_one_week">sati 1</string>
+  <string name="watchlist_page_add_to_watchlist_snackbar_period_for_one_month">zwat 1</string>
+  <string name="watchlist_page_add_to_watchlist_snackbar_period_for_three_months">zwát 3</string>
+  <string name="watchlist_page_add_to_watchlist_snackbar_period_for_six_months">zwát 6</string>
   <string name="watchlist_expiry_dialog_title">Khai jen nwuan Lis saai-a̱ghyi</string>
   <string name="watchlist_expiry_dialog_permanent">A̱di̱ndi̱ng</string>
   <string name="watchlist_expiry_dialog_one_week">Sati 1</string>

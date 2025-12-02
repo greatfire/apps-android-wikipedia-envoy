@@ -20,6 +20,8 @@ class ChangingLanguageTest : BaseTest<MainActivity>(
 ) {
     private val HEBREW = "Hebrew"
     private val JAPANESE = "Japanese"
+    private val LANG_CODE_JAPANESE = "ja"
+    private val LANG_CODE_HEBREW = "he"
     private val searchTerm = "apple"
     private val bottomNavRobot = BottomNavRobot()
     private val settingsRobot = SettingsRobot()
@@ -46,11 +48,10 @@ class ChangingLanguageTest : BaseTest<MainActivity>(
             .disableDarkMode(context)
         languageListRobot
             .addNewLanguage()
-            .openSearchLanguage()
-        searchRobot
-            .typeTextInView(JAPANESE)
+            .openSearchLanguage(context)
+            .typeInSearchView(JAPANESE)
         languageListRobot
-            .assertJapaneseLanguageTextColor(theme = Theme.LIGHT)
+            .assertJapaneseLanguageTextColor(context, Theme.LIGHT)
             .scrollToLanguageAndClick(JAPANESE)
             .pressBack()
             .pressBack()
@@ -59,9 +60,9 @@ class ChangingLanguageTest : BaseTest<MainActivity>(
         setDeviceOrientation(isLandscape = true)
         searchRobot
             .tapSearchView()
-            .checkLanguageAvailability(JAPANESE)
-            .checkLanguageAvailability(HEBREW)
-            .clickLanguage(HEBREW)
+            .checkLanguageAvailability(LANG_CODE_JAPANESE)
+            .checkLanguageAvailability(LANG_CODE_HEBREW)
+            .clickLanguage(LANG_CODE_HEBREW)
             .typeTextInView(searchTerm)
             .checkSearchListItemHasRTLDirection()
         setDeviceOrientation(isLandscape = false)

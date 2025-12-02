@@ -98,7 +98,7 @@
                 android:layout_marginBottom="8dp"
                 android:layoutDirection="ltr"
                 android:lineSpacingExtra="6sp"
-                android:text="@string/libraries_list"
+                android:text="foo"
                 android:textAppearance="?android:attr/textAppearanceSmall"
                 android:textColor="?attr/secondary_color"
                 android:textIsSelectable="true" />

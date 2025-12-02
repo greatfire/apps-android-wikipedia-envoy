@@ -68,6 +68,7 @@ class FeedFragment : Fragment() {
         fun onFeaturedImageSelected(card: FeaturedImageCard)
         fun onLoginRequested()
         fun updateToolbarElevation(elevate: Boolean)
+        fun onErrorRetry()
     }
 
     private val requestFeedConfigurationLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
@@ -199,7 +200,10 @@ class FeedFragment : Fragment() {
         }
 
         override fun onRetryFromOffline() {
-            refresh()
+            /// trigger envoy again in case we're offline because it failed
+            callback?.onErrorRetry()
+            // when envoy finishes it will trigger the refresh
+            // refresh()
         }
 
         override fun onError(t: Throwable) {

@@ -172,7 +172,8 @@ class MenuNavTabDialog : ExtendedBottomSheetDialogFragment() {
             binding.mainDrawerProxyContainer.visibility = View.VISIBLE
             binding.mainDrawerValidContainer.visibility = View.GONE
             binding.mainDrawerInvalidContainer.visibility = View.GONE
-            if (CronetNetworking.cronetEngine() == null) {
+            // if (CronetNetworking.cronetEngine() == null) {
+            if (Prefs.validServices.isNullOrEmpty()) {
                 binding.mainDrawerProxyOn.visibility = View.GONE
                 binding.mainDrawerProxyOff.visibility = View.VISIBLE
             } else {

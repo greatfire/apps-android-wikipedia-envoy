@@ -446,6 +446,14 @@ class MainFragment : Fragment(), BackPressedHandler, MenuProvider, FeedFragment.
         callback()?.updateToolbarElevation(elevate)
     }
 
+    override fun onErrorRetry() {
+        val activity = requireActivity()
+        if (activity is MainActivity) {
+            val mainActivity = activity as MainActivity
+            mainActivity.onRetryButton()
+        }
+    }
+
     fun requestUpdateToolbarElevation() {
         val fragment = currentFragment
         updateToolbarElevation(fragment is FeedFragment && fragment.shouldElevateToolbar())

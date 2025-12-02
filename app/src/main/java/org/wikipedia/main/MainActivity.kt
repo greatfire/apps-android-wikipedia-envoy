@@ -66,33 +66,27 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
             val sanitizedUrl = UrlUtil.sanitizeUrl(testedUrl)
             Log.d(TAG, "URL: $sanitizedUrl VALID! TIME: $time ms")
 
-            // populate debug menu
-            if (BuildConfig.BUILD_TYPE == "debug" && !testedService.isNullOrEmpty()) {
+            if (!testedService.isNullOrEmpty()) {
                 validServices.add(testedService + " - " + sanitizedUrl)
-                Prefs.validServices = validServices
+                // populate debug menu
+                if (BuildConfig.BUILD_TYPE == "debug") {
+                    Prefs.validServices = validServices
+                }
             }
 
             if (EnvoyTransportType.DIRECT.name.equals(testedService)) {
                 Log.d(TAG, "DIRECT CONNECTION SUCCESSFUL")
                 // set flag so resuming activity doesn't trigger another envoy check
                 envoyUnused = true
-            } else {
-                mainScope.launch {
-                    if (waitingForEnvoy) {
-                        // when the first valid url is received, refresh ui
-                        waitingForEnvoy = false
+            }
 
-                        val fragment = mainActivityFragment()
-                        if (fragment is MainFragment) {
-                            Log.d(TAG, "FIRST VALID URL, REFRESH UI")
-                            fragment.refreshFragment()
-                        } else {
-                            Log.w(TAG, "UNEXPECTED FRAGMENT, CAN'T REFRESH")
-                        }
-                    } else {
-                        Log.d(TAG, "ADDITIONAL VALID URL, IGNORE")
-                    }
-                }
+            if (waitingForEnvoy) {
+                Log.d(TAG, "CONNECTION SUCCESSFUL, REFRESH UI")
+                // when the first valid url is received, refresh ui
+                waitingForEnvoy = false
+                refreshMainFragment()
+            } else {
+                Log.d(TAG, "ADDITIONAL VALID URL, IGNORE")
             }
         }
 
@@ -100,10 +94,12 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
             val sanitizedUrl = UrlUtil.sanitizeUrl(testedUrl)
             Log.d(TAG, "URL: $sanitizedUrl INVALID! TIME: $time ms")
 
-            // populate debug menu
-            if (BuildConfig.BUILD_TYPE == "debug" && !testedService.isNullOrEmpty()) {
+            if (!testedService.isNullOrEmpty()) {
                 invalidServices.add(testedService + " - " + sanitizedUrl)
-                Prefs.invalidServices = invalidServices
+                // populate debug menu
+                if (BuildConfig.BUILD_TYPE == "debug") {
+                    Prefs.invalidServices = invalidServices
+                }
             }
         }
 
@@ -111,16 +107,22 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
             val sanitizedUrl = UrlUtil.sanitizeUrl(testedUrl)
             Log.e(TAG, "URL: $sanitizedUrl BLOCKED! (RETRY LATER)")
 
-            // populate debug menu (add to invalid list)
-            if (BuildConfig.BUILD_TYPE == "debug" && !testedService.isNullOrEmpty()) {
+            if (!testedService.isNullOrEmpty()) {
                 invalidServices.add(testedService + " - " + sanitizedUrl)
-                Prefs.invalidServices = invalidServices
+                // populate debug menu
+                if (BuildConfig.BUILD_TYPE == "debug") {
+                    Prefs.invalidServices = invalidServices
+                }
             }
         }
 
         override fun reportOverallStatus(status: String, time: Long) {
             Log.d(TAG, "FINISHED! TIME: $time ms")
             Log.d(TAG, "STATUS: $status")
+
+            // envoy is finished, so reset flag in case we want to try again
+            waitingForEnvoy = false
+
             if (EnvoyTestStatus.BLOCKED.name.equals(status) && !envoyUnused) {
                 // all urls blocked due to previous failures, show dialog advising to
                 // retry later, but ignore if direct connection was successful
@@ -185,6 +187,18 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
         checkAndInitEnvoy()
     }
 
+    fun onRetryButton() {
+        if (validServices.isNullOrEmpty()) {
+            // even if these flags were set, something isn't working, so clear them
+            waitingForEnvoy = false
+            envoyUnused = false
+            checkAndInitEnvoy()
+        } else {
+            // envoy should be working, don't test again, just refresh to clear error
+            refreshMainFragment()
+        }
+    }
+
     fun checkAndInitEnvoy() {
 
         // TODO: onCreate also checks the following before onboarding, is that necessary here?
@@ -207,14 +221,14 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
             waitingForEnvoy = true
         }
 
+        validServices.clear()
+        invalidServices.clear()
         // clear debug ui
         if (BuildConfig.BUILD_TYPE == "debug") {
-            validServices.clear()
             Prefs.validServices = validServices
-            invalidServices.clear()
             Prefs.invalidServices = invalidServices
-            updateMessages.clear()
-            Prefs.updateMessages = updateMessages
+            // updateMessages.clear()
+            // Prefs.updateMessages = updateMessages
         }
         invalidateOptionsMenu()
 
@@ -356,7 +370,7 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
 
         private val validServices = mutableListOf<String>()
         private val invalidServices = mutableListOf<String>()
-        private val updateMessages = mutableListOf<String>()
+        // private val updateMessages = mutableListOf<String>()
 
         private var currentDialog: AlertDialog? = null
 
@@ -415,6 +429,15 @@ class MainActivity : SingleFragmentActivity<MainFragment>(), MainFragment.Callba
 
         fun newIntent(context: Context): Intent {
             return Intent(context, MainActivity::class.java)
+        }
+
+        fun refreshMainFragment() {
+            val fragment = mainActivityFragment()
+            if (fragment is MainFragment) {
+                fragment.refreshFragment()
+            } else {
+                Log.w(TAG, "UNEXPECTED FRAGMENT, CAN'T REFRESH")
+            }
         }
     }
 }
